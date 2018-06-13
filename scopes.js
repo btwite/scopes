@@ -28,7 +28,7 @@ const symRoot = Symbol.for('scopesRoot');
 const symID = Symbol.for('scopesID');
 const symIDs = Symbol.for('scopesIDs');
 
-const scopesMap = new WeakMap();     // Map that contains the scopes extension object for a normalised object
+const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a normalised object
 
 const transforms = (new Map)
     .set(sPublicScope, _publicTransform)
@@ -56,7 +56,7 @@ const transformsScope = (new Map)
     .set(sNamedPrivateScopeGroup, sPrivate)
     .set(sNamedProtectedScopeGroup, sProtected)
 
-let nextID = 1;     // Next Object ID number
+let nextID = 1; // Next Object ID number
 
 /**
  * Replace Object.create so that we can auto detect instance creation and prepare the correct
@@ -82,7 +82,9 @@ function objectCreate(prototype, properties) {
 
 function createInstance(prototype, properties) {
     let o = fnObjectCreate.apply(undefined, arguments);
-    if (!o[symID]) { return (o); }
+    if (!o[symID]) {
+        return (o);
+    }
 
     // Create the scopes object and finish off the initial structure
     // Don't need IDs as these will be inherited from prototype
@@ -99,10 +101,12 @@ function createInstance(prototype, properties) {
  * Scope extension is defined by prefixing element names with:
  *      public__    - This is the default and provided for completness.
  *      private__   - Access is limited to the owning object.
- *      module__    - Access is limited to a nominated module object.
  *      protected__ - Access is limited to objects in the prototype hierachy.
- *      restricted__- Access is limited to objects that have the restricted scope function
  *      const_*__   - The element is declared as a constant. Applies to data properties.
+ *      private_scope       - Separate object with just private properties. Allows const__
+ *      protected_scope     - Separate object with just protected properties. Allows const__
+ *      private_scope__     - Named private group scope (separate to private). Allows const__
+ *      protected_scope__   - Named protected group scope (seperate to protected). Allows const__
  * 
  * @param {object} o
  *      POJO object to transform
@@ -114,24 +118,28 @@ function createInstance(prototype, properties) {
 function parse(fnObj) {
     // Process the variable arguments. We allow the prototype to be replaced with
     // function to receive the full scope function list.
-    let prototype = null, fnScopes = undefined;
+    let prototype = null,
+        fnScopes = undefined;
     if (arguments.length > 1) {
         fnScopes = arguments[arguments.length - 1];
         prototype = arguments[1];
         if (arguments.length == 2) {
-            if (typeof fnScopes === 'function') { prototype = null; }
-            else { fnScopes = undefined }
+            if (typeof fnScopes === 'function') {
+                prototype = null;
+            } else {
+                fnScopes = undefined
+            }
         }
     }
 
-    let scopeFns = {};                          // Scope access interface object.
-    let o = fnObj(                              // Call back for the object to parse
+    let scopeFns = {}; // Scope access interface object.
+    let o = fnObj( // Call back for the object to parse
         _getPublicFn(scopeFns),
         _getPrivateFn(scopeFns),
         _getProtectedFn(scopeFns)
     );
     if (!o || typeof o !== 'object') {
-        throw "Can only parse type object";
+        throw new Error("Can only parse type object");
     }
 
     // If a separate prototype has been provided then we assume the object to parse 
@@ -141,19 +149,20 @@ function parse(fnObj) {
     }
 
     // Allocate our normalised object and associated scopes object.
-    let oRoot = fnObjectCreate(prototype);      // Root object is the public object and interface.
-    scopeFns.object = oRoot;                    // Save here for access convenience
-    _setSymbol(oRoot, symRoot, oRoot);          // All scope objects link back to the public root
-    _assignIDs(oRoot);                          // Unique ID and supported inherited IDs.
+    let oRoot = fnObjectCreate(prototype); // Root object is the public object and interface.
+    scopeFns.object = oRoot; // Save here for access convenience
+    _setSymbol(oRoot, symRoot, oRoot); // All scope objects link back to the public root
+    _assignIDs(oRoot); // Unique ID and supported inherited IDs.
 
-    let oScopes = fnObjectCreate(null);         // Create our matching scopes object.
+    let oScopes = fnObjectCreate(null); // Create our matching scopes object.
     _setSymbol(oScopes, symRoot, oRoot);
     oScopes.protectedScopes = [];
     scopesMap.set(oRoot, oScopes);
 
     // Iterate through the object specification and transform extended declarative property names.
     Object.keys(o).forEach(name => {
-        let actName = name, decl = name;
+        let actName = name,
+            decl = name;
         let i = name.indexOf(sConnector);
         if (i >= 0) {
             actName = name.substring(i + sConnector.length);
@@ -178,29 +187,44 @@ function parse(fnObj) {
     _setDefaultScopeFn(scopeFns, sPrivate);
     _setDefaultScopeFn(scopeFns, sProtected);
 
-    if (Object.isFrozen(o)) { Object.freeze(oRoot); }
-    else if (Object.isSealed(o)) { Object.seal(oRoot); }
+    if (Object.isFrozen(o)) {
+        Object.freeze(oRoot);
+    } else if (Object.isSealed(o)) {
+        Object.seal(oRoot);
+    }
 
     // Give the caller the complete list of scope functions if they want it
     delete scopeFns.object;
-    if (fnScopes) { fnScopes(scopeFns); }
+    if (fnScopes) {
+        fnScopes(scopeFns);
+    }
 
     return (oRoot);
 }
 
 function _getPublicFn(scopeFns) {
-    return (that => { return (scopeFns.public(that)); });
+    return (that => {
+        return (scopeFns.public(that));
+    });
 }
+
 function _getPrivateFn(scopeFns) {
-    return (that => { return (scopeFns.private(that)); });
+    return (that => {
+        return (scopeFns.private(that));
+    });
 }
+
 function _getProtectedFn(scopeFns) {
-    return (that => { return (scopeFns.protected(that)); });
+    return (that => {
+        return (scopeFns.protected(that));
+    });
 }
 
 function _setDefaultScopeFn(scopeFns, sScope) {
     if (!scopeFns[sScope])
-        scopeFns[sScope] = that => { throw Error(`Scope ${sScope} is empty`) };
+        scopeFns[sScope] = that => {
+            throw new Error(`Scope ${sScope} is empty`)
+        };
 }
 
 function _assignIDs(o) {
@@ -209,7 +233,8 @@ function _assignIDs(o) {
     _setSymbol(o, symID, id);
 
     // Look up the prototype list to capture the supported inherited IDs.
-    let ids1 = {}; ids1[id] = true;
+    let ids1 = {};
+    ids1[id] = true;
     for (let p = Object.getPrototypeOf(o); p != null; p = Object.getPrototypeOf(p)) {
         let ids2 = p[symIDs];
         if (!ids2)
@@ -240,13 +265,16 @@ function _validateID(id, o, errmsg) {
 function _publicTransform(scopeFns, oScopes, oSrc, scopeName, name) {
     __publicTransform(scopeFns, oScopes, oSrc, scopeName, name, Object.getOwnPropertyDescriptor(oSrc, scopeName));
 }
+
 function _constTransform(scopeFns, oScopes, oSrc, scopeName, name) {
     _constPublicTransform.apply(undefined, arguments);
 }
+
 function _constPublicTransform(scopeFns, oScopes, oSrc, scopeName, name) {
     let desc = Object.getOwnPropertyDescriptor(oSrc, scopeName);
     __publicTransform(scopeFns, oScopes, oSrc, scopeName, name, _setConstDescriptor(desc));
 }
+
 function __publicTransform(scopeFns, oScopes, oSrc, scopeName, name, desc) {
     Object.defineProperty(scopeFns.object, name, desc);
     if (!scopeFns.public) {
@@ -265,14 +293,20 @@ function _publicThis(id) {
 function _privateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
     __privateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, Object.getOwnPropertyDescriptor(oSrc, scopeName));
 }
+
 function _constPrivateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
     let desc = Object.getOwnPropertyDescriptor(oSrc, scopeName);
     __privateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, _setConstDescriptor(desc));
 }
+
 function __privateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, desc) {
     Object.defineProperty(_getPrivateScope(scopeFns.object, oScopes, sScope), name, desc);
-    if (_isPropertyWritable(desc)) { oScopes['flConst' + sScope] = false; }
-    if (!scopeFns[sScope]) { scopeFns[sScope] = _privateThis(oScopes, scopeFns.object[symID], sScope); }
+    if (_isPropertyWritable(desc)) {
+        oScopes['flConst' + sScope] = false;
+    }
+    if (!scopeFns[sScope]) {
+        scopeFns[sScope] = _privateThis(oScopes, scopeFns.object[symID], sScope);
+    }
 }
 
 function _privateThis(oScopes, id, sScope) {
@@ -299,17 +333,21 @@ function _privateThis(oScopes, id, sScope) {
 
 function _getPrivateScope(oRoot, oScopes, sScope) {
     return (_getScope(sScope, oRoot, oScopes,
-        (oScope) => { oScopes['flConst' + sScope] = true; }));
+        (oScope) => {
+            oScopes['flConst' + sScope] = true;
+        }));
 }
 
 
 function _protectedTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
     __protectedTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, Object.getOwnPropertyDescriptor(oSrc, scopeName));
 }
+
 function _constProtectedTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
     let desc = Object.getOwnPropertyDescriptor(oSrc, scopeName);
     __protectedTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, _setConstDescriptor(desc));
 }
+
 function __protectedTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, desc) {
     Object.defineProperty(_getProtectedScope(scopeFns.object, oScopes, sScope), name, desc);
     if (!scopeFns[sScope]) {
@@ -332,20 +370,57 @@ function _getProtectedScope(oRoot, oScopes, sScope) {
     }));
 }
 
-function _privateScopeGroupTransform() {
-
+function _privateScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
+    __privateScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, sScope);
 }
 
-function _protectedScopeGroupTransform() {
-
+function _namedPrivateScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
+    __privateScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, name);
 }
 
-function _namedPrivateScopeGroupTransform() {
-
+function __privateScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, nameOfScope) {
+    _parseScopeGroup(oSrc, scopeName, (oGroup, scName, actName) => {
+        _privateTransform(scopeFns, oScopes, oGroup, scName, actName, nameOfScope)
+    }, (oGroup, scName, actName) => {
+        _constPrivateTransform(scopeFns, oScopes, oGroup, scName, actName, nameOfScope)
+    });
 }
 
-function _namedProtectedScopeGroupTransform() {
+function _protectedScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
+    __protectedScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, sScope);
+}
 
+function _namedProtectedScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope) {
+    __protectedScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, name);
+}
+
+function __protectedScopeGroupTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, nameOfScope) {
+    _parseScopeGroup(oSrc, scopeName, (oGroup, scName, actName) => {
+        _protectedTransform(scopeFns, oScopes, oGroup, scName, actName, nameOfScope)
+    }, (oGroup, scName, actName) => {
+        _constProtectedTransform(scopeFns, oScopes, oGroup, scName, actName, nameOfScope)
+    });
+}
+
+function _parseScopeGroup(oSrc, scopeName, fnCallback, fnConstCallback) {
+    let oGroup = oSrc[scopeName];
+    if (!oGroup || typeof oGroup !== 'object') {
+        throw new Error(`Invalid scope group for '${scopeName}'`);
+    }
+    Object.keys(oGroup).forEach(name => {
+        let actName = name,
+            decl = name;
+        let i = name.indexOf(sConnector);
+        if (i >= 0) {
+            actName = name.substring(i + sConnector.length);
+            decl = name.substring(0, i + sConnector.length);
+        }
+        if (!transforms.get(decl)) {
+            fnCallback(oGroup, name, name);
+        } else if (decl === sConst) {
+            fnConstCallback(oGroup, name, actName);
+        }
+    });
 }
 
 
@@ -401,7 +476,9 @@ function _getScope(sScope, oRoot, oScopes, fnInit, fnPrototype) {
     if (!oScope) {
         let prototype = fnPrototype ? fnPrototype() : null;
         oScopes[sScope] = oScope = fnObjectCreate(prototype);
-        if (fnInit) { fnInit(oScope); }
+        if (fnInit) {
+            fnInit(oScope);
+        }
         _setSymbol(oScope, symRoot, oRoot);
     }
     return (oScope);
