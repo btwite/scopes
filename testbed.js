@@ -6,8 +6,31 @@
 
 let scopes = require('./scopes');
 
-testScopesGroupParse();
-testScopesParse();
+testCrossObjectAccess();
+//testScopesGroupParse();
+//testScopesParse();
+
+function testCrossObjectAccess() {
+    const Person = scopes.parse((Public, Private) => {
+        return {
+            private_scope: {
+                name: "No Name"
+            },
+            setName(x) {
+                Private(this).name = x;
+            },
+            sayHelloTo(other) {
+                console.log(`${Private(this).name} says hello to ${Private(other).name}`);
+            },
+        };
+    });
+
+    const tim = Object.create(Person);
+    tim.setName("Tim");
+    const john = Object.create(Person);
+    john.setName("John");
+    john.sayHelloTo(tim);
+}
 
 function testScopesGroupParse() {
     log('\n----- testScopesGroupParse -----')
@@ -105,9 +128,7 @@ function testScopesGroupParse() {
                 },
             },
         }
-    }, ot1, s => {
-        scfns = s
-    });
+    }, ot1);
 
     ot2.method1();
     ot2.method100();

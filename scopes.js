@@ -28,7 +28,9 @@ const symRoot = Symbol.for('scopesRoot');
 const symID = Symbol.for('scopesID');
 const symIDs = Symbol.for('scopesIDs');
 
-const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a normalised object
+const sflConst = 'flConst';
+
+const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a parsed object
 
 const transforms = (new Map)
     .set(sPublicScope, _publicTransform)
@@ -302,7 +304,7 @@ function _constPrivateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope
 function __privateTransform(scopeFns, oScopes, oSrc, scopeName, name, sScope, desc) {
     Object.defineProperty(_getPrivateScope(scopeFns.object, oScopes, sScope), name, desc);
     if (_isPropertyWritable(desc)) {
-        oScopes['flConst' + sScope] = false;
+        oScopes[sflConst + sScope] = false;
     }
     if (!scopeFns[sScope]) {
         scopeFns[sScope] = _privateThis(oScopes, scopeFns.object[symID], sScope);
@@ -321,7 +323,7 @@ function _privateThis(oScopes, id, sScope) {
         }
         let oPrivateData = oRootScopes[sData][id];
         if (!oPrivateData) {
-            if (oScopes['flConst' + sScope]) {
+            if (oScopes[sflConst + sScope]) {
                 oRootScopes[sData][id] = oPrivateData = oScopes[sScope]; // Can just use constant private object
             } else {
                 oRootScopes[sData][id] = oPrivateData = fnObjectCreate(oScopes[sScope]); // Otherwise inherit from it
@@ -334,7 +336,7 @@ function _privateThis(oScopes, id, sScope) {
 function _getPrivateScope(oRoot, oScopes, sScope) {
     return (_getScope(sScope, oRoot, oScopes,
         (oScope) => {
-            oScopes['flConst' + sScope] = true;
+            oScopes[sflConst + sScope] = true;
         }));
 }
 
@@ -433,7 +435,11 @@ function _fixHierachicalScopes(oRoot, oScopes, scopeFns) {
             }
             oScopes[sScope] = fnObjectCreate(prot);
             oScopes.protectedScopes[oScopes.protectedScopes.length] = sScope;
-            scopeFns[sScope] = _protectedThis(oScopes, scopeFns.object[symID], sScope);
+            // Only add the scope function to the scope function list for the default protected
+            // scope. Named scopes have a level of secrecy and can only be referenced and shared
+            // by those in the know.
+            if (sScope == sProtected)
+                scopeFns[sScope] = _protectedThis(oScopes, scopeFns.object[symID], sScope);
         }
     });
 }
@@ -468,7 +474,7 @@ function _setConstDescriptor(desc) {
 }
 
 function _isPropertyWritable(desc) {
-    return (desc.writeable || desc.set);
+    return (desc.writable || desc.set);
 }
 
 function _getScope(sScope, oRoot, oScopes, fnInit, fnPrototype) {
