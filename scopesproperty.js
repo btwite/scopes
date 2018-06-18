@@ -24,10 +24,8 @@ const sProtected = 'protected';
 
 const symPublic = Symbol.for('scopePublic');
 const symID = Symbol.for('scopeID');
-const symIDs = Symbol.for('scopeIDs');
 const symInstances = Symbol.for('scopesInstances');
 const symProtScopes = Symbol.for('scopesProtected');
-const symAttributes = Symbol.for('scopesAttributes');
 
 const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a parsed object
 
@@ -91,40 +89,45 @@ function defineProperty(oPublic, prop, fnDescriptor) {
 function _getScopesObject(oPublic) {
     let oScopes = scopesMap.get(oPublic);
     if (oPublic) return (oScopes);
+    return (_allocateScopesObject(oPublic));
+}
 
-    // Will need to create a new scopes object.
-    _setSymbol(oPublic, symPublic, oPublic); // All scope objects link back to the public root
+function _allocateScopesObject(oPublic) {
     _assignIDs(oPublic); // Unique ID and supported inherited IDs.
 
     let oScopes = Object.create(null);
     _setSymbol(oScopes, symPublic, oPublic);
-    oScopes[symInstances] = Object.create(null);
+    _setSymbol(oScopes, symID, allocateScopeID());
     scopesMap.set(oPublic, oScopes);
     return (oScopes);
-
 }
 
-function _publicThis(id, sScope) {
+function _getPrivateInstancesObject(oPublic) {
+    let oScopes = _getScopesObject(oPublic);
+    let oSymInstances = oScopes[symInstances];
+    if (oSymInstances) return (oSymInstances);
+    return (oScopes[symInstances] = Object.create(null));
+}
+
+function _publicThis() {
     return (fnPublic);
 }
 
 function _privateThis(id, sScope) {
     return (that => {
         let oPublic = that[symPublic] || that;
-        _validateID(id, root, `Invalid ${sScope} scope function`);
+        _validateID(id, oPublic, `Invalid ${sScope} scope function`);
         // Each object requires an instance of private data for inherited objects
-        let oSymInstances = scopesMap.get(root)[symInstances];
+        let oSymInstances = _getPrivateInstancesObject(oPublic);
         let scopeInstance = oSymInstances[sScope];
         if (!scopeInstance) {
             oSymInstances[sScope] = scopeInstance = Object.create(null);
         }
         let oPrivInstance = scopeInstance[id];
         if (!oPrivInstance) {
-            if (oScopes[symAttributes].constantScopes[sScope]) {
-                scopeInstance[id] = oPrivInstance = oScopes[sScope]; // Can just use constant private object
-            } else {
-                scopeInstance[id] = oPrivInstance = Object.create(oScopes[sScope]); // Otherwise inherit from it
-            }
+            // Need to inherit from the defined private scope object
+            // Each object in a hierachy requires a separate instance for changes
+            scopeInstance[id] = oPrivInstance = Object.create(_getScopesObject(that)[sScope]);
         }
         return (oPrivInstance);
     });
