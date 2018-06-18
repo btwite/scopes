@@ -5,10 +5,63 @@
 "use strict"
 
 let scopes = require('./scopes');
+scopes.setObjectHooks();
 
-testCrossObjectAccess();
+test();
+//testCrossObjectAccess();
 //testScopesGroupParse();
 //testScopesParse();
+
+function test() {
+    let scopefns = {};
+    let o1 = {};
+    // If value, writable, get, set are absent then treated as a data element.
+    // If value or writable and get or set defined throw exception.
+    scopes.defineProperty(o, "propName", (Public, Private, Protected, Scope) => {
+        return ({
+            scope: 'scopeName', // or { scopeName : 'myScope' }
+            configurable: true,
+            enumerable: true,
+            value: undefined,
+            writable: true,
+            get: function () {},
+            set: function (v) {},
+        });
+    });
+
+    scopes.defineProperties(o, (Public, Private, Protected, Scope) => {
+        return ({
+            property1: {},
+            property2: {}
+        });
+    })
+
+    let o1 = {
+        meth1: scopes.property(scopeFns, {
+            scope: 'private',
+            value: function () {
+                scopeFns.public(this).meth2();
+                scopeFns.myProt(this, () => {
+                    this.meth3();
+                });
+            },
+        }),
+        meth3: scopes.property(scopeFns, {
+            scope: {
+                protected: 'myProt'
+            },
+            get: function () {
+                return (10);
+            },
+            set: function (v) {
+
+            }
+        }),
+        meth2: function () {
+            log('Hello World');
+        }
+    }
+}
 
 function testCrossObjectAccess() {
     const Person = scopes.parse((Public, Private) => {
