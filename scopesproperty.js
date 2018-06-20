@@ -185,6 +185,7 @@ function _getProtectedScope(oScopes, sScope) {
     prot = _getProtectedScope(_getScopesObject(prot), sScope);
     oScopes[sScope] = oScope = Object.create(prot);
     _setSymbol(oScope, symPublic, oScopes[symPublic]);
+    if (!oScope[symScopeName]) oScope[symScopeName] = sScope;
     return (oScope);
 }
 
@@ -198,20 +199,7 @@ function _allocateScopeID(oPublic, oScopes) {
 
 function _assignScopeID(oPublic, sid, oScopes = undefined) {
     if (!oScopes) oScopes = _getScopesObject(oPublic);
-    if (!oScopes[symIDs]) {
-        oScopes[symIDs] = Object.create(_getIDsPrototype(oPublic));
-    }
     if (!oScopes[symIDs][sid]) oScopes[symIDs][sid] = true;
-}
-
-function _getIDsPrototype(oPublic) {
-    let pubProt = Object.getPrototypeOf(oPublic);
-    if (pubProt == null) return (null);
-    let oScopes = _getScopesObject(pubProt);
-    if (!oScopes[symIDs]) {
-        oScopes[symIDs] = Object.create(_getIDsPrototype(pubProt));
-    }
-    return (oScopes[symIDs]);
 }
 
 function _getScopesObject(oPublic) {
@@ -223,8 +211,19 @@ function _getScopesObject(oPublic) {
 function _allocateScopesObject(oPublic) {
     let oScopes = Object.create(null);
     _setSymbol(oScopes, symPublic, oPublic);
+    _setSymbol(oScopes, symIDs, Object.create(_getIDsPrototype(oPublic)));
     scopesMap.set(oPublic, oScopes);
     return (oScopes);
+}
+
+function _getIDsPrototype(oPublic) {
+    let pubProt = Object.getPrototypeOf(oPublic);
+    if (pubProt == null) return (null);
+    let oScopes = _getScopesObject(pubProt);
+    if (!oScopes[symIDs]) {
+        oScopes[symIDs] = Object.create(_getIDsPrototype(pubProt));
+    }
+    return (oScopes[symIDs]);
 }
 
 function _getPrivateInstancesObject(oScopes) {
@@ -240,7 +239,7 @@ function _publicThis() {
 function _privateThis(id, sScope, oScopes) {
     return (that => {
         // Optimise access to the same private scope.
-        if (that[symID] == id && that[symScopeName] == sScope) return (that);
+        if (!that || that[symID] == id && that[symScopeName] == sScope) return (that);
 
         let oPublic = that[symPublic] || that;
         let puboScopes = _getScopesObject(oPublic);
@@ -270,15 +269,12 @@ function _privateThis(id, sScope, oScopes) {
 function _protectedThis(id, sScope) {
     return (that => {
         // Optimise access to the same protected scope.
-        if (that[symScopeName] == sScope) return (that);
+        if (!that || that[symScopeName] == sScope) return (that);
 
         let oPublic = that[symPublic] || that;
         let puboScopes = _getScopesObject(oPublic);
         _validateID(id, puboScopes, `Invalid ${sScope} scope function`);
-        let oScope = puboScopes[sScope];
-        if (!oScope) {
-            throw new Error(`Scope '${sScope}' does not exist`);
-        }
+        let oScope = _getProtectedScope(puboScopes, sScope);
         return (oScope);
     });
 }
@@ -390,53 +386,6 @@ function _createScopesObject(oPublic) {
     return (oScopes);
 }
 
-function old_privateThis(oScopes, id, sScope) {
-    return (that => {
-        let root = that[symPublic];
-        _validateID(id, root, `Invalid ${sScope} scope function`);
-        // Each object requires an instance of private data for inherited objects
-        let oSymInstances = scopesMap.get(root)[symInstances];
-        let scopeInstance = oSymInstances[sScope];
-        if (!scopeInstance) {
-            oSymInstances[sScope] = scopeInstance = Object.create(null);
-        }
-        let oPrivInstance = scopeInstance[id];
-        if (!oPrivInstance) {
-            if (oScopes[symAttributes].constantScopes[sScope]) {
-                scopeInstance[id] = oPrivInstance = oScopes[sScope]; // Can just use constant private object
-            } else {
-                scopeInstance[id] = oPrivInstance = Object.create(oScopes[sScope]); // Otherwise inherit from it
-            }
-        }
-        return (oPrivInstance);
-    });
-}
-
-function _getPrivateScope1(oPublic, oScopes, sScope) {
-    return (_getScope(sScope, oPublic, oScopes,
-        () => {
-            let constScopes = oScopes[symAttributes].constantScopes;
-            if (!constScopes) {
-                oScopes[symAttributes].constantScopes = constScopes = Object.create(null);
-            }
-            constScopes[sScope] = true;
-        }));
-}
-
-function old_protectedThis(oScopes, id, sScope) {
-    return (that => {
-        let root = that[symPublic];
-        _validateID(id, root, `Invalid ${sScope} scope function`);
-        return (scopesMap.get(root)[sScope]);
-    });
-}
-
-function _getProtectedScope1(oPublic, oScopes, sScope) {
-    return (_getScope(sScope, oPublic, oScopes, undefined, () => {
-        return (_getScopePrototype(sScope, oPublic));
-    }));
-}
-
 
 function _fixHierachicalScopes(oPublic, oScopes, scopeFns) {
     _getPrototypeProtectedScopes(oPublic).forEach(sScope => {
@@ -476,21 +425,4 @@ function _getScopePrototype(sScope, oPublic) {
         return (null);
     }
     return (null);
-}
-
-function _isPropertyWritable(desc) {
-    return (desc.writable || desc.set);
-}
-
-function _getScope(sScope, oPublic, oScopes, fnInit, fnPrototype) {
-    let oScope = oScopes[sScope];
-    if (!oScope) {
-        let prototype = fnPrototype ? fnPrototype() : null;
-        oScopes[sScope] = oScope = Object.create(prototype);
-        if (fnInit) {
-            fnInit(oScope);
-        }
-        _setSymbol(oScope, symPublic, oPublic);
-    }
-    return (oScope);
 }

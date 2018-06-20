@@ -40,16 +40,6 @@ const sProtectedScopeGroup = 'protected_scope';
 const sNamedPrivateScopeGroup = 'private_scope' + sConnector;
 const sNamedProtectedScopeGroup = 'protected_scope' + sConnector;
 
-const symPublic = Symbol.for('scopePublic');
-const symID = Symbol.for('scopeID');
-const symIDs = Symbol.for('scopeIDs');
-const symInstances = Symbol.for('scopesInstances');
-const symProtScopes = Symbol.for('scopesProtected');
-const symAttributes = Symbol.for('scopesAttributes');
-
-const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a parsed object
-const publicCreators = new WeakSet(); // Register for high level functions that create scoped properties.
-
 const transforms = (new Map)
     .set(sPublicScope, _publicTransform)
     .set(sPrivateScope, _privateTransform)
@@ -76,18 +66,6 @@ const transformsScope = (new Map)
     .set(sNamedPrivateScopeGroup, sPrivate)
     .set(sNamedProtectedScopeGroup, sProtected)
 
-let nextID = 1; // Next Object ID number
-function _nextID() {
-    return ('sid' + nextID++);
-}
-
-// Scope prototypes containing common scopes methods
-let protPublic = Object.freeze({});
-
-let protPrivate = Object.freeze({});
-
-let protProtected = Object.freeze({})
-
 /**
  * Parse a POJO with scope extended elements and produce a native implementation
  * Scope extension is defined by prefixing element names with:
@@ -109,46 +87,15 @@ let protProtected = Object.freeze({})
  *      POJO object with scope extended property names to be transformed.
  */
 
-function parse(fnObj) {
-    // Process the variable arguments. We allow the prototype to be replaced with
-    // function to receive the full scope function list.
-    let prototype = null,
-        fnScopes = undefined;
-    if (arguments.length > 1) {
-        fnScopes = arguments[arguments.length - 1];
-        prototype = arguments[1];
-        if (arguments.length == 2) {
-            if (typeof fnScopes === 'function') {
-                prototype = null;
-            } else {
-                fnScopes = undefined
-            }
-        }
+function parse(oPublic, spec) {
+    if (arguments.length == 1) {
+        spec = oPublic;
+        oPublic = Object.create(null);
     }
 
-    let scopeFns = {}; // Scope access interface object.
-    let superObj = {}; // Object container for actual super implementation
-    let o = fnObj( // Call back for the object to parse
-        _getPublicFn(scopeFns),
-        _getPrivateFn(scopeFns),
-        _getProtectedFn(scopeFns),
-        _getSuperFn(superObj),
-        scopeFns
-    );
-    if (!o || typeof o !== 'object') {
+    if (!oPublic || typeof oPublic !== 'object') {
         throw new Error("Can only parse type object");
     }
-
-    // If a separate prototype has been provided then we assume the object to parse 
-    // is a template. Otherwise we take the prototype that the object has assigned.
-    if (!prototype || typeof prototype !== 'object') {
-        prototype = Object.getPrototypeOf(o);
-    }
-
-    // Allocate our public object. The rest of the scopes structure will be created on an
-    // as need basis.
-    let oPublic = Object.create(prototype);
-    scopeFns.oPublic = oPublic; // Save here for access convenience
 
     // Iterate through the object specification and transform extended declarative property names.
     Object.keys(o).forEach(name => {
@@ -159,12 +106,14 @@ function parse(fnObj) {
             actName = name.substring(i + sConnector.length);
             decl = name.substring(0, i + sConnector.length);
         }
+        let desc;
         let transformer = transforms.get(decl);
         if (transformer) {
-            transformer(scopeFns, oScopes, o, name, actName, transformsScope.get(decl));
-            return;
+            desc = transformer(name, actName, transformsScope.get(decl));
+        } else {
+            desc = _publicTransform(name, name, sPublic);
         }
-        _publicTransform(scopeFns, oScopes, o, name, name, sPublic);
+        property.defineProperty(oPublic, actName, desc);
     });
 
     // Set default functions for scopes that have not been declared

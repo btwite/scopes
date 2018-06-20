@@ -53,7 +53,7 @@ function testScopesDefineProperty() {
             method5: {
                 scope: 'protected',
                 value: function () {
-                    log('method5');
+                    log('method5', this);
                 }
             }
         });
@@ -85,7 +85,23 @@ function testScopesDefineProperty() {
 
     o2.method7();
     let o3 = Object.create(o2);
-    o3.method7();
+    let o4 = Object.create(o3);
+    o4.method7();
+    scopes.defineProperty(o3, 'meth1', () => {
+        return ({
+            scope: 'protected',
+            value: function () {
+                log('meth1');
+            }
+        });
+    });
+    scopes.defineProperty(o4, 'meth2', (Public, Private, Protected) => {
+        return (function () {
+            log('meth2');
+            Protected(this).meth1();
+        });
+    });
+    o4.meth2();
 }
 
 function testCrossObjectAccess() {
