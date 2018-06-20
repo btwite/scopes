@@ -7,12 +7,15 @@
 
 'use strict'
 
-let modProperty = require('./scopesproperty');
 let modParser = require('./scopesparser');
+let modProperty = require('./scopesproperty');
 
 module.exports = {
-    parse: modParser.parser,
-    defineProperty: modParser.defineProperty,
-    defineProperties: modParser.defineProperties,
+    parse: modParser.parse,
+    defineProperty: modProperty.defineProperty,
+    defineProperties: modProperty.defineProperties,
+    pushDefaultPropertyAttributes: modProperty.pushDefaultPropertyAttributes,
+    popDefaultPropertyAttributes: modProperty.popDefaultPropertyAttributes,
+    resetDefaultPropertyAttributes: modProperty.resetDefaultPropertyAttributes
 }
 Object.freeze(module.exports);

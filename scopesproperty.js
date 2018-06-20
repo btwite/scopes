@@ -11,11 +11,15 @@
 module.exports = {
     defineProperty,
     defineProperties,
+    pushDefaultPropertyAttributes,
+    popDefaultPropertyAttributes,
+    resetDefaultPropertyAttributes
 };
 Object.freeze(module.exports);
 
 require('./scopesparser').setPropertyInterface({
-    defineProperty
+    defineProperty,
+    defineProperties,
 });
 
 const sPublic = 'public';
@@ -48,7 +52,36 @@ const scopeGetFns = {
     protected: _getProtectedScope
 }
 
+let defPropAttrs = {
+    enumerable: true,
+    writable: false,
+    configurable: false
+};
+const defAttrsStack = []; // Stack for managing default property attributes
+defAttrsStack.push(defPropAttrs);
+
 let lastScopeID = 0;
+
+function pushDefaultPropertyAttributes(attrs) {
+    let a = Object.assign({}, attrs);
+    Object.keys(defAttrsStack[0]).forEach(name => {
+        if (!a.hasOwnProperty(name)) a[name] = defAttrsStack[0][name];
+    });
+    defAttrsStack.push(defPropAttrs = a);
+}
+
+function popDefaultPropertyAttributes() {
+    if (defAttrsStack.length == 1)
+        return (null);
+    let a = defAttrsStack.pop();
+    defPropAttrs = defAttrsStack[defAttrsStack.length - 1];
+    return (a);
+}
+
+function resetDefaultPropertyAttributes() {
+    defPropAttrs = defAttrsStack[0];
+    defAttrsStack.length = 1;
+}
 
 /**
  * Extension of Object.defineProperty that will create a property for the supplied object
@@ -78,49 +111,68 @@ let lastScopeID = 0;
  *             scope. The returned scope function can then be shared with other trusted
  *             objects.
  *             Example: let myScope = fnScope('myScope'); .... myScope(this).prop
+ *          4. If the descriptor is for a public non objext value then a value can be returned
+ *             without the descriptor wrapper.
  */
 
 function defineProperty(oPublic, prop, fnDescriptor) {
-    if (typeof oPublic !== 'object' || oPublic.symID) {
+    let oScopes = _preparePropertyOperation(oPublic);
+    let fns = oScopes[symFns];
+    _defineProperty(oScopes, prop, fnDescriptor(fns.public, fns.private, fns.protected, fns[symScopeFn]));
+    return (oPublic);
+}
+
+function defineProperties(oPublic, fnDescriptors) {
+    let oScopes = _preparePropertyOperation(oPublic);
+    let fns = oScopes[symFns];
+    let descs = fnDescriptors(fns.public, fns.private, fns.protected, fns[symScopeFn]);
+    Object.keys(descs).forEach(prop => {
+        _defineProperty(oScopes, prop, descs[prop]);
+    });
+    return (oPublic);
+}
+
+function _preparePropertyOperation(oPublic) {
+    if (typeof oPublic !== 'object' || oPublic[symID]) {
         throw new Error('Invalid object for defining a scope property');
     }
-
     let oScopes = _getScopesObject(oPublic);
-    if (!oScopes.symID) {
+    if (!oScopes[symID]) {
         _allocateScopeID(oPublic, oScopes);
     }
-    let fns = oScopes.symFns;
+    let fns = oScopes[symFns];
     if (!fns) {
-        oScopes.symFns = fns = {
+        oScopes[symFns] = fns = {
             public: _publicThis(),
-            private: _privateThis(oScopes.symID, sPrivate, oScopes),
-            protected: _protectedThis(oScopes.symID, sProtected),
-            symScopeFn: _scopeThis(undefined, undefined, oScopes)
+            private: _privateThis(oScopes[symID], sPrivate, oScopes),
+            protected: _protectedThis(oScopes[symID], sProtected),
+            [symScopeFn]: _scopeThis(oScopes)
         }
     };
+    return (oScopes);
+}
 
-    let desc = _parseDescriptor(fnDescriptor(fns.public, fns.private, fns.protected, fns.symScopeFn));
-    if (!fns[desc.symScopeName]) {
-        fns[desc.symScopeName] = scopeTypeFns[desc.symScopeType](oScopes.symID, desc.symScopeName, oScopes);
+function _defineProperty(oScopes, prop, desc) {
+    desc = _parseDescriptor(desc);
+    if (desc[symScopeType] == sPublic) return (Object.defineProperty(oScopes[symPublic], prop, desc));
+    if (!oScopes[symFns][desc[symScopeName]]) {
+        oScopes[symFns][desc[symScopeName]] = scopeTypeFns[desc[symScopeType]](oScopes[symID], desc[symScopeName], oScopes);
     }
 
-    let oScope = scopeGetFns(oScopes, desc.symScopeName);
-    if (!oScope.symID) {
-        _setSymbol(oScope, symID, oScopes.symID);
-        _setSymbol(oScope, symScopeName, desc.symScopeName);
+    let oScope = scopeGetFns[desc[symScopeType]](oScopes, desc[symScopeName]);
+    if (!oScope[symID]) {
+        _setSymbol(oScope, symID, oScopes[symID]);
+        _setSymbol(oScope, symScopeName, desc[symScopeName]);
     }
 
-
-    desc.sid = sid;
-    _getScopeFunction
-    return (getScopeConstructor(desc));
+    return (Object.defineProperty(oScope, prop, desc));
 }
 
 function _getPrivateScope(oScopes, sScope) {
     let oScope = oScopes[sScope];
     if (oScope) return (oScope);
     oScopes[sScope] = oScope = Object.create(null);
-    _setSymbol(oScope, symPublic, oScopes.symPublic);
+    _setSymbol(oScope, symPublic, oScopes[symPublic]);
     return (oScope);
 }
 
@@ -128,43 +180,43 @@ function _getProtectedScope(oScopes, sScope) {
     let oScope = oScopes[sScope];
     if (oScope) return (oScope);
     // Protected scopes are hierachical so need to see if we have a prototype
-    let prot = Object.getPrototypeOf(oScopes.symPublic);
+    let prot = Object.getPrototypeOf(oScopes[symPublic]);
     if (prot == null) return (null);
     prot = _getProtectedScope(_getScopesObject(prot), sScope);
     oScopes[sScope] = oScope = Object.create(prot);
-    _setSymbol(oScope, symPublic, oScopes.symPublic);
+    _setSymbol(oScope, symPublic, oScopes[symPublic]);
     return (oScope);
 }
 
 function _allocateScopeID(oPublic, oScopes) {
-    if (oScopes.symID) {
+    if (oScopes[symID]) {
         throw new Error('Scope ID has already been allocated');
     }
-    oScopes.symID = 'sid' + ++lastScopeID;
-    _assignScopeID(oPublic, oScopes.symID, oScopes);
+    oScopes[symID] = 'sid' + ++lastScopeID;
+    _assignScopeID(oPublic, oScopes[symID], oScopes);
 }
 
-function _assignScopeID(oPublic, sid, oScopes) {
+function _assignScopeID(oPublic, sid, oScopes = undefined) {
     if (!oScopes) oScopes = _getScopesObject(oPublic);
-    if (!oScopes.symIDs) {
-        oScopes.symIDs = Object.create(_getIDsPrototype(oPublic));
+    if (!oScopes[symIDs]) {
+        oScopes[symIDs] = Object.create(_getIDsPrototype(oPublic));
     }
-    if (!oScopes.symIDs[sid]) oScopes.symIDs[sid] = true;
+    if (!oScopes[symIDs][sid]) oScopes[symIDs][sid] = true;
 }
 
 function _getIDsPrototype(oPublic) {
     let pubProt = Object.getPrototypeOf(oPublic);
     if (pubProt == null) return (null);
     let oScopes = _getScopesObject(pubProt);
-    if (!oScopes.symIDs) {
-        oScopes.symIDs = Object.create(_getIDsPrototype(pubProt));
-        return (oScopes.symIDs);
+    if (!oScopes[symIDs]) {
+        oScopes[symIDs] = Object.create(_getIDsPrototype(pubProt));
     }
+    return (oScopes[symIDs]);
 }
 
 function _getScopesObject(oPublic) {
     let oScopes = scopesMap.get(oPublic);
-    if (oPublic) return (oScopes);
+    if (oScopes) return (oScopes);
     return (_allocateScopesObject(oPublic));
 }
 
@@ -175,8 +227,7 @@ function _allocateScopesObject(oPublic) {
     return (oScopes);
 }
 
-function _getPrivateInstancesObject(oPublic) {
-    let oScopes = _getScopesObject(oPublic);
+function _getPrivateInstancesObject(oScopes) {
     let oSymInstances = oScopes[symInstances];
     if (oSymInstances) return (oSymInstances);
     return (oScopes[symInstances] = Object.create(null));
@@ -189,12 +240,13 @@ function _publicThis() {
 function _privateThis(id, sScope, oScopes) {
     return (that => {
         // Optimise access to the same private scope.
-        if (that.symID == id && that.symScopeName == sScope) return (that);
+        if (that[symID] == id && that[symScopeName] == sScope) return (that);
 
         let oPublic = that[symPublic] || that;
-        _validateID(id, oPublic, `Invalid ${sScope} scope function`);
+        let puboScopes = _getScopesObject(oPublic);
+        _validateID(id, puboScopes, `Invalid ${sScope} scope function`);
         // Each object requires an instance of private data for inherited objects
-        let oSymInstances = _getPrivateInstancesObject(oPublic);
+        let oSymInstances = _getPrivateInstancesObject(puboScopes);
         let scopeInstance = oSymInstances[sScope];
         if (!scopeInstance) {
             oSymInstances[sScope] = scopeInstance = Object.create(null);
@@ -209,6 +261,7 @@ function _privateThis(id, sScope, oScopes) {
                 throw new Error(`Scope '${sScope}' does not exist`);
             }
             scopeInstance[id] = oPrivInstance = Object.create(oScopes[sScope]);
+            _setSymbol(oPrivInstance, symPublic, oPublic);
         }
         return (oPrivInstance);
     });
@@ -217,11 +270,12 @@ function _privateThis(id, sScope, oScopes) {
 function _protectedThis(id, sScope) {
     return (that => {
         // Optimise access to the same protected scope.
-        if (that.symScopeName == sScope) return (that);
+        if (that[symScopeName] == sScope) return (that);
 
         let oPublic = that[symPublic] || that;
-        _validateID(id, oPublic, `Invalid ${sScope} scope function`);
-        let oScope = _getScopesObject(oPublic)[sScope];
+        let puboScopes = _getScopesObject(oPublic);
+        _validateID(id, puboScopes, `Invalid ${sScope} scope function`);
+        let oScope = puboScopes[sScope];
         if (!oScope) {
             throw new Error(`Scope '${sScope}' does not exist`);
         }
@@ -230,9 +284,9 @@ function _protectedThis(id, sScope) {
 }
 
 function _scopeThis(oScopes) {
-    return ((that, name) => {
-        let fn = oScopes.symFns[name];
-        if (!fn) {
+    return ((name, that) => {
+        let fn = oScopes[symFns][name];
+        if (typeof fn !== 'function') {
             throw new Error(`Scope '${name}' does not exist`);
         }
         return (fn(that));
@@ -240,36 +294,44 @@ function _scopeThis(oScopes) {
 }
 
 function _parseDescriptor(srcDesc) {
+
     let desc = {
-        symScopeType: sPublic,
-        symScopeName: sPublic
+        [symScopeType]: sPublic,
+        [symScopeName]: sPublic
     };
+    Object.assign(desc, defPropAttrs);
+
+    // May have just been passed a public value that is not an object so need to wrap this.
+    if (typeof srcDesc !== 'object' || Array.isArray(srcDesc)) {
+        desc.value = srcDesc;
+        return (desc);
+    }
     // Copy descriptor details but will need to parse the scope property
     Object.keys(srcDesc).forEach(name => {
         if (name != 'scope') {
-            Object.defineProperty(desc, name, Object.getOwnPropertyDescriptor(srcDesc, name));
+            Object.defineProperty(desc, name, srcDesc);
             return;
         }
         if (typeof srcDesc.scope === 'string') {
-            if ((desc.symScopeType = srcDesc.scope) != sPublic && srcDesc.scope != sPrivate && srcDesc.scope != sProtected) {
+            if ((desc[symScopeType] = srcDesc.scope) != sPublic && srcDesc.scope != sPrivate && srcDesc.scope != sProtected) {
                 throw new Error(`'${srcScope.scope}' is an invalid scope property value`);
             }
-            desc.symScopeName = srcDesc.scope;
+            desc[symScopeName] = srcDesc.scope;
         } else if (typeof srcDesc.scope === 'object') {
             let o = srcDesc.scope;
             if (o.private && o.protected) {
                 throw new Error("Invalid scope property object value. Only private or protected element permitted");
             }
             if (o.private) {
-                desc.symScopeType = sPrivate;
-                desc.symScopeName = o.private;
+                desc[symScopeType] = sPrivate;
+                desc[symScopeName] = o.private;
             } else if (o.protected) {
-                desc.symScopeType = sProtected;
-                desc.symScopeName = o.protected;
+                desc[symScopeType] = sProtected;
+                desc[symScopeName] = o.protected;
             } else {
                 throw new Error("Invalid scope property object value. Only private or protected element permitted");
             }
-            if (typeof desc.symScopeName !== 'string') {
+            if (typeof desc[symScopeName] !== 'string') {
                 throw new Error("String expected for scope name");
             }
         } else {
@@ -280,31 +342,6 @@ function _parseDescriptor(srcDesc) {
 }
 
 
-
-function _getPublicFn(scopeFns) {
-    return (that => {
-        return (scopeFns.public(that));
-    });
-}
-
-function _getPrivateFn(scopeFns) {
-    return (that => {
-        return (scopeFns.private(that));
-    });
-}
-
-function _getProtectedFn(scopeFns) {
-    return (that => {
-        return (scopeFns.protected(that));
-    });
-}
-
-function _getSuperFn(superObj) {
-    return ((that, sMethod, args, noMethodCallback) => {
-        return (superObj.dispatch.apply(undefined, arguments));
-    });
-}
-
 function _getSuperDispatchFn(oPublic) {
     return ((that, sMethod, args, noMethodCall) => {
         // We have the current instance (that) and the executing code public object.
@@ -312,13 +349,6 @@ function _getSuperDispatchFn(oPublic) {
         // back up the prototype list until we find the correct prototype protected instance
         // to match.
     });
-}
-
-function _setDefaultScopeFn(scopeFns, sScope) {
-    if (!scopeFns[sScope])
-        scopeFns[sScope] = that => {
-            throw new Error(`Scope ${sScope} is empty`)
-        };
 }
 
 function _setSymbol(o, sym, val) {
@@ -330,9 +360,9 @@ function _setSymbol(o, sym, val) {
     return (o);
 }
 
-function _validateID(id, o, errmsg) {
-    let ids = o[symIDs];
-    if (!ids || !ids[id]) {
+function _validateID(id, oScopes, errmsg) {
+    let ids = oScopes[symIDs];
+    if (!ids[id]) {
         throw new Error(errmsg);
     }
 }
@@ -382,7 +412,7 @@ function old_privateThis(oScopes, id, sScope) {
     });
 }
 
-function _getPrivateScope(oPublic, oScopes, sScope) {
+function _getPrivateScope1(oPublic, oScopes, sScope) {
     return (_getScope(sScope, oPublic, oScopes,
         () => {
             let constScopes = oScopes[symAttributes].constantScopes;
@@ -401,7 +431,7 @@ function old_protectedThis(oScopes, id, sScope) {
     });
 }
 
-function _getProtectedScope(oPublic, oScopes, sScope) {
+function _getProtectedScope1(oPublic, oScopes, sScope) {
     return (_getScope(sScope, oPublic, oScopes, undefined, () => {
         return (_getScopePrototype(sScope, oPublic));
     }));

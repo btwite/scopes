@@ -5,62 +5,87 @@
 "use strict"
 
 let scopes = require('./scopes');
-scopes.setObjectHooks();
 
-test();
+//test();
+testScopesDefineProperty();
 //testCrossObjectAccess();
 //testScopesGroupParse();
 //testScopesParse();
 
 function test() {
-    let scopefns = {};
-    let o1 = {};
-    // If value, writable, get, set are absent then treated as a data element.
-    // If value or writable and get or set defined throw exception.
-    scopes.defineProperty(o, "propName", (Public, Private, Protected, Scope) => {
+    let o = scopes.defineProperty(Object.create(null), "propName", (Public, Private, Protected, Scope) => {
+        return (100);
+    });
+    log(o);
+    o.propName = 200;
+    log(o);
+}
+
+function testScopesDefineProperty() {
+    let o1 = scopes.defineProperties({}, (Public, Private, Protected, Scope) => {
         return ({
-            scope: 'scopeName', // or { scopeName : 'myScope' }
-            configurable: true,
-            enumerable: true,
-            value: undefined,
-            writable: true,
-            get: function () {},
-            set: function (v) {},
+            method1: function () {
+                log('method1');
+            },
+            method2: {
+                scope: 'private',
+                value: function () {
+                    log('method2');
+                    Scope('myPrivate', this).method4()
+                },
+            },
+            method3: function () {
+                log('-----------------------')
+                log('method3');
+                Private(this).method2();
+                log('-----------------------')
+            },
+            method4: {
+                scope: {
+                    private: 'myPrivate'
+                },
+                value: function () {
+                    log('method4');
+                    Public(this).method1();
+                    Protected(this).method5();
+                },
+            },
+            method5: {
+                scope: 'protected',
+                value: function () {
+                    log('method5');
+                }
+            }
+        });
+    });
+    log(o1);
+    o1.method1();
+    trycode(() => {
+        o1.method2();
+    });
+    o1.method3();
+
+    let o2 = scopes.defineProperties(Object.create(o1), (Public, Private, Protected, Scope) => {
+        return ({
+            method7: function () {
+                log('-----------------------')
+                log('method7');
+                Protected(this).method5();
+                Protected(this).method6();
+                log('-----------------------')
+            },
+            method6: {
+                scope: 'protected',
+                value: function () {
+                    log('method6');
+                }
+            }
         });
     });
 
-    scopes.defineProperties(o, (Public, Private, Protected, Scope) => {
-        return ({
-            property1: {},
-            property2: {}
-        });
-    })
-
-    let o1 = {
-        meth1: scopes.property(scopeFns, {
-            scope: 'private',
-            value: function () {
-                scopeFns.public(this).meth2();
-                scopeFns.myProt(this, () => {
-                    this.meth3();
-                });
-            },
-        }),
-        meth3: scopes.property(scopeFns, {
-            scope: {
-                protected: 'myProt'
-            },
-            get: function () {
-                return (10);
-            },
-            set: function (v) {
-
-            }
-        }),
-        meth2: function () {
-            log('Hello World');
-        }
-    }
+    o2.method7();
+    let o3 = Object.create(o2);
+    o3.method7();
 }
 
 function testCrossObjectAccess() {

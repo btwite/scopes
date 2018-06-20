@@ -11,16 +11,16 @@
 'use strict'
 
 module.exports = {
-    parser,
+    parse,
     setPropertyInterface,
 };
 Object.freeze(module.exports);
 
 let property = undefined;
 
-function setPropertyInterface(interface) {
+function setPropertyInterface(intface) {
     if (!property)
-        property = interface;
+        property = intface;
 }
 
 const sPublic = 'public';
@@ -89,7 +89,7 @@ let protPrivate = Object.freeze({});
 let protProtected = Object.freeze({})
 
 /**
- * Parse a javascript POJO with scope extended elements and produce a native implementation.
+ * Parse a POJO with scope extended elements and produce a native implementation
  * Scope extension is defined by prefixing element names with:
  *      public__    - This is the default and provided for completness.
  *      private__   - Access is limited to the owning object.
@@ -100,11 +100,13 @@ let protProtected = Object.freeze({})
  *      private_scope__     - Named private group scope (separate to private). Allows const__
  *      protected_scope__   - Named protected group scope (seperate to protected). Allows const__
  * 
- * @param {object} o
- *      POJO object to transform
+ * @param {object} oPublic
+ *      Target public object that the parse transformation is to be applied to.
+ *      If only one argument is provided then this be the scope specification object.
+ *      In this case the parser will create the public object with no prototype.
  * 
- * @param {object} prototype
- *      Optional prototype object to be attached to the object.
+ * @param {object} spec
+ *      POJO object with scope extended property names to be transformed.
  */
 
 function parse(fnObj) {
@@ -514,8 +516,3 @@ function _getScope(sScope, oPublic, oScopes, fnInit, fnPrototype) {
     }
     return (oScope);
 }
-
-module.exports = {
-    parse,
-}
-Object.freeze(module.exports);
