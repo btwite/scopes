@@ -1,0 +1,26 @@
+{
+  "name": "prop-scopes",
+  "version": "1.0.0",
+  "description": "Assign 'public', 'protected' and 'private' scopes to object properties.",
+  "main": "scopes.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://btwite@bitbucket.org/btwite/scopes.git"
+  },
+  "keywords": [
+    "scope",
+    "scopes",
+    "private",
+    "protected",
+    "inheritance",
+    "prototype",
+    "hiding",
+    "property"
+  ],
+  "author": "Bruce Twite",
+  "license": "ISC",
+  "homepage": "https://bitbucket.org/btwite/scopes#readme"
+}
