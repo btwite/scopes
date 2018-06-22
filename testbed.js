@@ -8,17 +8,17 @@ let scopes = require('./scopes');
 
 //test();
 testScopesDefineProperty();
-//testCrossObjectAccess();
-//testScopesGroupParse();
-//testScopesParse();
+testCrossObjectAccess();
+testScopesGroupParse();
+testScopesParse();
 
 function test() {
-    let o = scopes.defineProperty(Object.create(null), "propName", (Public, Private, Protected, Scope) => {
-        return (100);
-    });
-    log(o);
-    o.propName = 200;
-    log(o);
+    log(Object.getPrototypeOf(() => {
+        10
+    }));
+    log(Object.getPrototypeOf(function () {
+        10
+    }));
 }
 
 function testScopesDefineProperty() {
@@ -129,7 +129,9 @@ function testCrossObjectAccess() {
 function testScopesGroupParse() {
     log('\n----- testScopesGroupParse -----')
     let scfns;
-    let ot1 = scopes.parse((Public, Private) => {
+    let ot1 = {};
+    scopes.parse(ot1, (Public, ...more) => {
+        scfns = scopes.packageScopesFnArgs([Public, ...more]);
         return {
             method1: function () {
                 log(`method1`);
@@ -172,8 +174,6 @@ function testScopesGroupParse() {
                 },
             },
         }
-    }, s => {
-        scfns = s
     });
 
     ot1.method1();
@@ -189,16 +189,17 @@ function testScopesGroupParse() {
     log(scfns.protected(ot1).value);
     scfns.protected(ot1).method4();
     scfns.protected(ot1).method5();
-    scfns.myPrivate(ot1).method6();
-    scfns.myPrivate(ot1).method7();
+    let omyPrivate = scfns.scope('myPrivate', ot1);
+    let omyProtected = scfns.scope('myProtected', ot1);
+    omyPrivate.method7();
     trycode(() => {
-        scfns.myPrivate(ot1).method8();
+        omyPrivate.method8();
     });
-    scfns.myProtected(ot1).method8();
-    scfns.myProtected(ot1).method9();
+    omyProtected.method8();
+    omyProtected.method9();
 
     log('Test inheritence of public, protected and named protected groups')
-    let ot2 = scopes.parse((Public) => {
+    let ot2 = scopes.parse(Object.create(ot1), (Public) => {
         return {
             method100: function () {
                 log(`method100`);
@@ -222,7 +223,7 @@ function testScopesGroupParse() {
                 },
             },
         }
-    }, ot1);
+    });
 
     ot2.method1();
     ot2.method100();
@@ -230,16 +231,19 @@ function testScopesGroupParse() {
     scfns.protected(ot2).method5();
     scfns.protected(ot2).method400();
     scfns.protected(ot2).method500();
-    scfns.myProtected(ot2).method8();
-    scfns.myProtected(ot2).method9();
-    scfns.myProtected(ot2).method800();
-    scfns.myProtected(ot2).method900();
+
+    omyProtected = scfns.scope('myProtected', ot2);
+    omyProtected.method8();
+    omyProtected.method9();
+    omyProtected.method800();
+    omyProtected.method900();
 }
 
 function testScopesParse() {
     log('\n----- testScopesParse -----')
     let scfns1, scfns2, scfns3;
-    let ot1 = scopes.parse((Public, Private) => {
+    let ot1 = scopes.parse((Public, Private, ...more) => {
+        scfns1 = scopes.packageScopesFnArgs([Public, Private, ...more]);
         return {
             public__method1: function () {
                 console.log('method1');
@@ -285,11 +289,10 @@ function testScopesParse() {
                 console.log('method5')
             }
         };
-    }, s => {
-        scfns1 = s;
     });
 
-    let ot3 = scopes.parse(() => {
+    let ot3 = scopes.parse(Object.create(ot1), (...more) => {
+        scfns2 = scopes.packageScopesFnArgs([...more]);
         return {
             protected__method6: function () {
                 console.log('method6')
@@ -298,18 +301,15 @@ function testScopesParse() {
                 console.log('method7')
             },
         };
-    }, ot1, s => {
-        scfns2 = s;
     });
 
-    let ot4 = scopes.parse(() => {
+    let ot4 = scopes.parse(Object.create(ot3), function () {
+        scfns3 = scopes.packageScopesFnArgs(arguments);
         return {
             const_restricted__method8: function () {
                 console.log('method8')
             },
         };
-    }, ot3, s => {
-        scfns3 = s;
     });
 
     log('-- Transformed Object');

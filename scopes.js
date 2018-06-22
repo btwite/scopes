@@ -14,6 +14,7 @@ module.exports = {
     parse: modParser.parse,
     defineProperty: modProperty.defineProperty,
     defineProperties: modProperty.defineProperties,
+    packageScopesFnArgs: modProperty.packageScopesFnArgs,
     pushDefaultPropertyAttributes: modProperty.pushDefaultPropertyAttributes,
     popDefaultPropertyAttributes: modProperty.popDefaultPropertyAttributes,
     resetDefaultPropertyAttributes: modProperty.resetDefaultPropertyAttributes
