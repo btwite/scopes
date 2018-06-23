@@ -6,23 +6,147 @@
 
 let scopes = require('./scopes');
 
-//test();
-testScopesDefineProperty();
-testCrossObjectAccess();
-testScopesGroupParse();
-testScopesParse();
+test();
+
+testSuper();
+//testAssign();
+//testDelete();
+//testGetOwnPropertyDescriptor();
+//testScopesDefineProperty();
+//testCrossObjectAccess();
+//testScopesGroupParse();
+//testScopesParse();
 
 function test() {
-    log(Object.getPrototypeOf(() => {
-        10
-    }));
-    log(Object.getPrototypeOf(function () {
-        10
-    }));
+
+}
+
+function testSuper() {
+    let o1 = scopes.parse(function (Public, Private, Protected) {
+        return {
+            'protected_scope': {
+                method1: function (...args) {
+                    log('o1::method1');
+                    scopes.super(this, Protected(o1), 'method1')(...args);
+                    log(...args);
+                }
+            },
+            main: function (...args) {
+                Protected(this).method1(...args);
+            }
+        };
+    });
+    let o2 = scopes.parse(Object.create(o1), function (Public, Private, Protected) {
+        return {
+            'protected_scope': {
+                method1: function (...args) {
+                    log('o2::method1');
+                    scopes.super(this, Protected(o2), 'method1')(...args);
+                }
+            },
+        };
+    });
+    let o3 = scopes.parse(Object.create(o2), function (Public, Private, Protected) {
+        return {
+            'protected_scope': {
+                method1: function (...args) {
+                    log('o3::method1');
+                    scopes.super(this, Protected(o3), 'method1')(...args);
+                }
+            },
+        };
+    });
+    let o4 = Object.create(o3);
+    o4.main(1, 2, 3, 4);
+}
+
+function testAssign() {
+    log('---------------- testAssign --------------');
+    let fns;
+    let o1 = scopes.parse(function () {
+        fns = scopes.packageScopesFnArgs(arguments);
+        return {
+            'private__fld1': 200,
+            'private__meth1': function () {
+                log('meth1');
+            },
+            'protected__fld2': 300,
+            'protected__meth2': function () {
+                log('meth2');
+            },
+            'private_scope__myPrivate': {
+                fld3: 1000,
+                meth3: function () {
+                    log('meth3');
+                },
+            },
+            fld4: 5000,
+            meth4: function () {
+                log('meth4');
+                fns.private(this).meth1();
+                fns.protected(this).meth2();
+            },
+        }
+    });
+    scopes.log(['o1:', o1]);
+    let o2 = scopes.assign({}, o1);
+    fns.private(o2).fld1 = 200000;
+    scopes.log(['o2', o2]);
+    fns.private(o1).fld1 = 300000;
+    scopes.log(['o1', o1]);
+    fns.private(o1).meth1();
+    o2.meth4();
+    log('------------------------------');
+}
+
+function testDelete() {
+    log('---------------- testDelete --------------');
+    let fns;
+    let o1 = scopes.parse(function () {
+        fns = scopes.packageScopesFnArgs(arguments);
+        return {
+            'private__fld1': 200,
+            'protected__fld2': 300,
+            'private_scope__myPrivate': {
+                fld3: 1000
+            },
+            fld4: 5000,
+        }
+    });
+    scopes.log(o1);
+    scopes.delete(fns.private(o1), 'fld1');
+    scopes.delete(fns.protected(o1), 'fld2');
+    scopes.delete(fns.scope('myPrivate', o1), 'fld3');
+    scopes.delete(o1, 'fld4');
+    scopes.log(o1);
+    log('------------------------------');
+}
+
+function testGetOwnPropertyDescriptor() {
+    log('---------------- testGetOwnPropertyDescriptor --------------');
+    let fns;
+    let o1 = scopes.parse(function () {
+        fns = scopes.packageScopesFnArgs(arguments);
+        return {
+            'private__fld1': 200,
+            'protected__fld2': 300,
+            'private_scope__myPrivate': {
+                fld3: 1000
+            },
+            fld4: 5000,
+        }
+    });
+    log(scopes.getOwnPropertyDescriptor(fns.private(o1), 'fld1'));
+    log(scopes.getOwnPropertyDescriptor(fns.protected(o1), 'fld2'));
+    log(scopes.getOwnPropertyDescriptor(fns.scope('myPrivate', o1), 'fld3'));
+    log(scopes.getOwnPropertyDescriptor(o1, 'fld4'));
+    log('------------------------------');
 }
 
 function testScopesDefineProperty() {
-    let o1 = scopes.defineProperties({}, (Public, Private, Protected, Scope) => {
+    let scfns1;
+    let o1 = scopes.defineProperties({}, function (Public, Private, Protected, Scope) {
+        scfns1 = scopes.packageScopesFnArgs(arguments);
         return ({
             method1: function () {
                 log('method1');
@@ -87,7 +211,9 @@ function testScopesDefineProperty() {
     let o3 = Object.create(o2);
     let o4 = Object.create(o3);
     o4.method7();
-    scopes.defineProperty(o3, 'meth1', () => {
+    let scfns3;
+    scopes.defineProperty(o3, 'meth1', function () {
+        scfns3 = scopes.packageScopesFnArgs(arguments);
         return ({
             scope: 'protected',
             value: function () {
@@ -95,13 +221,24 @@ function testScopesDefineProperty() {
             }
         });
     });
-    scopes.defineProperty(o4, 'meth2', (Public, Private, Protected) => {
+    let scfns4;
+    scopes.defineProperty(o4, 'meth2', function (Public, Private, Protected) {
+        scfns4 = scopes.packageScopesFnArgs(arguments);
         return (function () {
             log('meth2');
             Protected(this).meth1();
         });
     });
     o4.meth2();
+
+    scopes.freeze(o1);
+    scopes.seal(o3);
+
+    log('----------------- Test Freezing/Sealing scoped objects');
+    log(Object.isFrozen(o3), Object.isFrozen(o2));
+    log(Object.isFrozen(scfns1.private(o1)), Object.isFrozen(scfns1.protected(o1)), Object.isFrozen(scfns1.scope('myPrivate', o1)));
+    log(Object.isFrozen(scfns3.protected(o3)), Object.isSealed(scfns3.protected(o3)));
+    log('-----------------');
 }
 
 function testCrossObjectAccess() {
@@ -339,6 +476,7 @@ function testScopesParse() {
     ot1.val2 = 600;
     ot2.val2 = 700;
     console.log('instance:', ot2.val2, 'prototype', ot1.val2);
+    scopes.log(['ot1:', ot1, 'ot2:', ot2]);
 
     console.log('-- Test constant values');
     console.log('cval', ot1.cval, ot2.cval);

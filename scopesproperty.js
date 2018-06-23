@@ -11,17 +11,13 @@
 module.exports = {
     defineProperty,
     defineProperties,
+    isScoped,
     packageScopesFnArgs,
     pushDefaultPropertyAttributes,
     popDefaultPropertyAttributes,
     resetDefaultPropertyAttributes
 };
 Object.freeze(module.exports);
-
-require('./scopesparser').setPropertyInterface({
-    defineProperty: _defineParsedProperty,
-    prepareParserOperation,
-});
 
 const sPublic = 'public';
 const sPrivate = 'private';
@@ -33,7 +29,6 @@ const symIDs = Symbol.for('scopeIDs');
 const symFns = Symbol.for('scopeFns');
 const symScopeFn = Symbol.for('scopeFn');
 const symInstances = Symbol.for('scopesInstances');
-const symProtScopes = Symbol.for('scopesProtected');
 const symScopeType = Symbol.for('scopeType');
 const symScopeName = Symbol.for('scopeName');
 
@@ -62,6 +57,29 @@ const defAttrsStack = []; // Stack for managing default property attributes
 defAttrsStack.push(defPropAttrs);
 
 let lastScopeID = 0;
+
+
+require('./scopesparser').setPropertyInterface({
+    defineProperty: _defineParsedProperty,
+    prepareParserOperation,
+});
+
+require('./scopesservices').setPropertyInterface({
+    isScoped,
+    defineProperty,
+    getScopesObject: _getScopesObject,
+    hasPrivateInstances: _hasPrivateInstances,
+    getPrivateInstancesObject: _getPrivateInstancesObject,
+    assignScopeID: _assignScopeID,
+    sPublic,
+    sPrivate,
+    symPublic,
+    symScopeName,
+    symScopeType,
+    symID,
+    symInstances,
+});
+
 
 function pushDefaultPropertyAttributes(attrs) {
     let a = Object.assign({}, attrs);
@@ -142,6 +160,10 @@ function defineProperties(oPublic, fnDescriptors) {
     return (oPublic);
 }
 
+function isScoped(oPublic) {
+    return (scopesMap.get(oPublic) ? true : false);
+}
+
 function _defineParsedProperty(oPublic, prop, desc) {
     _defineProperty(_getScopesObject(oPublic), prop, desc);
     return (oPublic);
@@ -191,8 +213,11 @@ function _defineProperty(oScopes, prop, desc) {
 function _getPrivateScope(oScopes, sScope) {
     let oScope = oScopes[sScope];
     if (oScope) return (oScope);
-    oScopes[sScope] = oScope = Object.create(null);
+    oScopes[sScope] = oScope = {};
     _setSymbol(oScope, symPublic, oScopes[symPublic]);
+    _setSymbol(oScope, symScopeName, sScope);
+    _setSymbol(oScope, symScopeType, sPrivate);
+    _applyFreezeSeal(oScope);
     return (oScope);
 }
 
@@ -203,12 +228,14 @@ function _getProtectedScope(oScopes, sScope) {
     oScopes[sScope] = oScope = Object.create(_getProtectedPrototype(oScopes[symPublic], sScope));
     _setSymbol(oScope, symPublic, oScopes[symPublic]);
     _setSymbol(oScope, symScopeName, sScope);
+    _setSymbol(oScope, symScopeType, sProtected);
+    _applyFreezeSeal(oScope);
     return (oScope);
 }
 
 function _getProtectedPrototype(oPublic, sScope) {
     let prot = Object.getPrototypeOf(oPublic);
-    if (prot == null) return (null);
+    if (prot == null || prot === Object.prototype) return (Object.prototype);
     return (_getProtectedScope(_getScopesObject(prot), sScope));
 }
 
@@ -232,7 +259,7 @@ function _getScopesObject(oPublic) {
 }
 
 function _allocateScopesObject(oPublic) {
-    let oScopes = Object.create(null);
+    let oScopes = {};
     _setSymbol(oScopes, symPublic, oPublic);
     _setSymbol(oScopes, symIDs, Object.create(_getIDsPrototype(oPublic)));
     scopesMap.set(oPublic, oScopes);
@@ -241,7 +268,7 @@ function _allocateScopesObject(oPublic) {
 
 function _getIDsPrototype(oPublic) {
     let pubProt = Object.getPrototypeOf(oPublic);
-    if (pubProt == null) return (null);
+    if (pubProt == null || pubProt === Object.prototype) return (Object.prototype);
     let oScopes = _getScopesObject(pubProt);
     if (!oScopes[symIDs]) {
         oScopes[symIDs] = Object.create(_getIDsPrototype(pubProt));
@@ -252,7 +279,11 @@ function _getIDsPrototype(oPublic) {
 function _getPrivateInstancesObject(oScopes) {
     let oSymInstances = oScopes[symInstances];
     if (oSymInstances) return (oSymInstances);
-    return (oScopes[symInstances] = Object.create(null));
+    return (oScopes[symInstances] = {});
+}
+
+function _hasPrivateInstances(oScopes) {
+    return (oScopes[symInstances] ? true : false);
 }
 
 function _publicThis() {
@@ -271,7 +302,7 @@ function _privateThis(id, sScope, oScopes) {
         let oSymInstances = _getPrivateInstancesObject(puboScopes);
         let scopeInstance = oSymInstances[sScope];
         if (!scopeInstance) {
-            oSymInstances[sScope] = scopeInstance = Object.create(null);
+            oSymInstances[sScope] = scopeInstance = {};
         }
         let oPrivInstance = scopeInstance[id];
         if (!oPrivInstance) {
@@ -279,11 +310,20 @@ function _privateThis(id, sScope, oScopes) {
             // Each object in a hierachy requires a separate instance for changes.
             // Note that we use the scopes object that was in focus when the scope
             // function was created.
+            // Note that where the public object associated with 'that' actually
+            // owns the private scope then we set the actual scope object to the
+            // instance.
             if (!oScopes[sScope]) {
                 throw new Error(`Scope '${sScope}' does not exist`);
             }
-            scopeInstance[id] = oPrivInstance = Object.create(oScopes[sScope]);
-            _setSymbol(oPrivInstance, symPublic, oPublic);
+            if (puboScopes === oScopes) {
+                oPrivInstance = oScopes[sScope];
+            } else {
+                oPrivInstance = Object.create(oScopes[sScope]);
+                _setSymbol(oPrivInstance, symPublic, oPublic);
+                _applyFreezeSeal(oPrivInstance);
+            }
+            scopeInstance[id] = oPrivInstance;
         }
         return (oPrivInstance);
     });
@@ -378,6 +418,12 @@ function _getSuperDispatchFn(oPublic) {
         // back up the prototype list until we find the correct prototype protected instance
         // to match.
     });
+}
+
+function _applyFreezeSeal(oScope) {
+    let oPublic = oScope[symPublic];
+    if (Object.isFrozen(oPublic)) Object.freeze(oScope);
+    else if (Object.isSealed(oPublic)) Object.seal(oScope);
 }
 
 function _setSymbol(o, sym, val) {

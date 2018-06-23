@@ -10,6 +10,8 @@
 
 'use strict'
 
+let services = require('./scopesservices');
+
 module.exports = {
     parse,
     setPropertyInterface,
@@ -91,7 +93,7 @@ const transformsScope = (new Map)
 function parse(oPublic, fnSpec) {
     if (arguments.length == 1) {
         fnSpec = oPublic;
-        oPublic = Object.create(null);
+        oPublic = {};
     } else if (!oPublic || typeof oPublic !== 'object') {
         throw new Error("Can only parse type object");
     }
@@ -115,9 +117,9 @@ function parse(oPublic, fnSpec) {
     });
 
     if (Object.isFrozen(spec)) {
-        Object.freeze(oPublic);
+        services.freeze(oPublic);
     } else if (Object.isSealed(spec)) {
-        Object.seal(oPublic);
+        services.seal(oPublic);
     }
     return (oPublic);
 }
