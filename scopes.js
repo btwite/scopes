@@ -18,7 +18,6 @@ module.exports = {
     packageScopesFnArgs: modProperty.packageScopesFnArgs,
     isScoped: modProperty.isScoped,
     getOwnPropertyDescriptor: modServices.getOwnPropertyDescriptor,
-    super: modServices.super,
     assign: modServices.assign,
     delete: modServices.delete,
     freeze: modServices.freeze,

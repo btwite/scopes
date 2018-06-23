@@ -28,6 +28,7 @@ const symID = Symbol.for('scopeID');
 const symIDs = Symbol.for('scopeIDs');
 const symFns = Symbol.for('scopeFns');
 const symScopeFn = Symbol.for('scopeFn');
+const symSuperFn = Symbol.for('scopeSuperFn');
 const symInstances = Symbol.for('scopesInstances');
 const symScopeType = Symbol.for('scopeType');
 const symScopeName = Symbol.for('scopeName');
@@ -107,7 +108,8 @@ function packageScopesFnArgs(args) {
         public: args[0],
         private: args[1],
         protected: args[2],
-        scope: args[3]
+        scope: args[3],
+        super: args[4],
     });
 }
 
@@ -146,14 +148,14 @@ function packageScopesFnArgs(args) {
 function defineProperty(oPublic, prop, fnDescriptor) {
     let oScopes = _preparePropertyOperation(oPublic);
     let fns = oScopes[symFns];
-    _defineProperty(oScopes, prop, fnDescriptor(fns.public, fns.private, fns.protected, fns[symScopeFn]));
+    _defineProperty(oScopes, prop, fnDescriptor(fns.public, fns.private, fns.protected, fns[symScopeFn], fns[symSuperFn]));
     return (oPublic);
 }
 
 function defineProperties(oPublic, fnDescriptors) {
     let oScopes = _preparePropertyOperation(oPublic);
     let fns = oScopes[symFns];
-    let descs = fnDescriptors(fns.public, fns.private, fns.protected, fns[symScopeFn]);
+    let descs = fnDescriptors(fns.public, fns.private, fns.protected, fns[symScopeFn], fns[symSuperFn]);
     Object.keys(descs).forEach(prop => {
         _defineProperty(oScopes, prop, descs[prop]);
     });
@@ -172,7 +174,7 @@ function _defineParsedProperty(oPublic, prop, desc) {
 function prepareParserOperation(oPublic, fnDescriptor) {
     let oScopes = _preparePropertyOperation(oPublic);
     let fns = oScopes[symFns];
-    return (fnDescriptor(fns.public, fns.private, fns.protected, fns[symScopeFn]));
+    return (fnDescriptor(fns.public, fns.private, fns.protected, fns[symScopeFn], fns[symSuperFn]));
 }
 
 function _preparePropertyOperation(oPublic) {
@@ -189,7 +191,8 @@ function _preparePropertyOperation(oPublic) {
             public: _publicThis(),
             private: _privateThis(oScopes[symID], sPrivate, oScopes),
             protected: _protectedThis(oScopes[symID], sProtected),
-            [symScopeFn]: _scopeThis(oScopes)
+            [symScopeFn]: _scopeThis(oScopes),
+            [symSuperFn]: _superThis(oScopes),
         }
     };
     return (oScopes);
@@ -342,6 +345,47 @@ function _protectedThis(id, sScope) {
     });
 }
 
+function _superThis(oScopes) {
+    return ((that, sMeth, fnUndefined) => {
+        let self = oScopes[symPublic];
+        if (that[symScopeType]) {
+            if (that[symScopeType] == sPrivate) return (_superUndefined(that, sMeth, fnUndefined));
+            self = _getProtectedScope(oScopes, that[symScopeName])
+        }
+        if (!self.isPrototypeOf(that) && that !== self) return (_superUndefined(that, sMeth, fnUndefined));
+        let prot = Object.getPrototypeOf(self);
+        if (prot == null || !(sMeth in prot)) return (_superUndefined(that, sMeth, fnUndefined));
+        let fn = _getSuperMethod(prot, sMeth);
+        if (!fn) return (_superUndefined(that, sMeth, fnUndefined));
+        return (_getSuperFn(fn, that, sMeth, fnUndefined));
+    });
+}
+
+function _getSuperMethod(prot, sMeth) {
+    for (; prot != null && prot !== Object.prototype; prot = Object.getPrototypeOf(prot)) {
+        if (!prot.hasOwnProperty(sMeth)) continue;
+        let fn = Object.getOwnPropertyDescriptor(prot, sMeth).value;
+        if (!fn || typeof fn !== 'function') return (undefined);
+        return (fn);
+    }
+    return (undefined);
+}
+
+function _getSuperFn(fn, that, sMeth, fnUndefined) {
+    return ((...args) => {
+        let result = fn.apply(that, args);
+        if (result === undefined && fnUndefined) return (fnUndefined(that, sMeth, args));
+        return (result);
+    });
+}
+
+function _superUndefined(that, sMeth, fnUndefined) {
+    return ((...args) => {
+        if (fnUndefined) return (fnUndefined(that, sMeth, args));
+        return (undefined);
+    });
+}
+
 function _scopeThis(oScopes) {
     return ((name, that) => {
         let fn = oScopes[symFns][name];
@@ -408,16 +452,6 @@ function _parseDescriptor(srcDesc) {
         }
     });
     return (desc);
-}
-
-
-function _getSuperDispatchFn(oPublic) {
-    return ((that, sMethod, args, noMethodCall) => {
-        // We have the current instance (that) and the executing code public object.
-        // If the instance however is from a protected scope then we will need to work
-        // back up the prototype list until we find the correct prototype protected instance
-        // to match.
-    });
 }
 
 function _applyFreezeSeal(oScope) {

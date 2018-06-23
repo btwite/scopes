@@ -22,13 +22,15 @@ function test() {
 }
 
 function testSuper() {
-    let o1 = scopes.parse(function (Public, Private, Protected) {
+    let o1 = scopes.parse(function (Public, Private, Protected, Scope, Super) {
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o1::method1');
-                    scopes.super(this, Protected(o1), 'method1')(...args);
-                    log(...args);
+                    return (Super(this, 'method1', (...args1) => {
+                        log(...args1);
+                        return (undefined);
+                    })(...args));
                 }
             },
             main: function (...args) {
@@ -36,22 +38,24 @@ function testSuper() {
             }
         };
     });
-    let o2 = scopes.parse(Object.create(o1), function (Public, Private, Protected) {
+    let o2 = scopes.parse(Object.create(o1), function (Public, Private, Protected, Scope, Super) {
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o2::method1');
-                    scopes.super(this, Protected(o2), 'method1')(...args);
+                    return (Super(this, 'method1')(...args));
                 }
             },
         };
     });
-    let o3 = scopes.parse(Object.create(o2), function (Public, Private, Protected) {
+    let o3 = scopes.parse(Object.create(o2), function (Public, Private, Protected, Scope, Super) {
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o3::method1');
-                    scopes.super(this, Protected(o3), 'method1')(...args);
+                    Super(this, 'method1', (...args1) => {
+                        log(...args);
+                    })(...args);
                 }
             },
         };

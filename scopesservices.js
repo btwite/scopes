@@ -7,7 +7,6 @@
 'use strict'
 
 module.exports = {
-    super: _super,
     assign,
     freeze,
     seal,
@@ -31,32 +30,6 @@ function setPropertyInterface(intface) {
         sPublic = property.sPublic;
         sPrivate = property.sPrivate;
     }
-}
-
-function _super(that, self, sMeth) {
-    if (!self.isPrototypeOf(that) && that !== self) return (_superUndefined);
-    let prot = Object.getPrototypeOf(self);
-    if (prot == null || !(sMeth in prot)) return (_superUndefined);
-    let fn = _getSuperMethod(prot, sMeth);
-    if (!fn) return (_superUndefined);
-    return ((...args) => {
-        return (fn.apply(that, args));
-    });
-}
-
-function _getSuperMethod(prot, sMeth) {
-    for (; prot != null && prot !== Object.prototype; prot = Object.getPrototypeOf(prot)) {
-        if (!prot.hasOwnProperty(sMeth)) continue;
-        let fn = Object.getOwnPropertyDescriptor(prot, sMeth).value;
-        if (!fn || typeof fn !== 'function') return (undefined);
-        return (fn);
-    }
-    return (undefined);
-}
-
-function _superUndefined() {
-    // Swallow the arguments and answer undefined
-    return (undefined)
 }
 
 function assign(oTarget, ...sources) {
