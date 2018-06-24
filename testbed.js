@@ -38,7 +38,7 @@ function testFinal() {
             }
         }
     });
-    scopes.finalise(o1, 'myScope');
+    scopes.finalise(fns1.scope('myScope', o1));
     scopes.log(o1);
 
     let o2 = scopes.parse(Object.create(o1), (...args) => {

@@ -167,20 +167,23 @@ function defineProperties(oPublic, fnDescriptors) {
     return (oPublic);
 }
 
-function finalise(oPublic, sProtScope) {
+function finalise(oScope) {
+    if (typeof oScope !== 'object' || !oScope[symScopeName]) {
+        throw new Error(`Object '${oScope}' cannot be finalised`);
+    }
+    let sProtScope = oScope[symScopeName];
     if (sProtScope == sProtected) {
         throw new Error('The default protected scope cannot be finalised');
     }
-    let oScopes;
-    if (!isScoped(oPublic) || !(oScopes = _getScopesObject(oPublic))[symFns][sProtScope]) {
-        throw new Error(`Protected scope '${sProtScope}' does not exist`);
+    let oScopes = _getScopesObject(oScope[symPublic]);
+    if (!(oScopes)[symFns][sProtScope]) {
+        throw new Error(`Protected scope '${sProtScope}' cannot be accessed`);
     }
-    let oScope = oScopes[sProtScope];
     if (oScope[symScopeType] != sProtected) {
         throw new Error(`'${sProtScope}' is not a protected scope`);
     }
     if (!oScope[symFinal]) _setSymbol(oScope, symFinal, true);
-    return (oPublic);
+    return (oScope);
 }
 
 function isFinal(oPublic, sProtScope) {
