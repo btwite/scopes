@@ -8,7 +8,8 @@ let scopes = require('./scopes');
 
 test();
 
-testSuper();
+testFinal();
+//testSuper();
 //testAssign();
 //testDelete();
 //testGetOwnPropertyDescriptor();
@@ -17,8 +18,48 @@ testSuper();
 //testScopesGroupParse();
 //testScopesParse();
 
-function test() {
+function test() {}
 
+function testFinal() {
+    let fns1, fns2
+    let o1 = scopes.parse((...args) => {
+        fns1 = scopes.packageScopesFnArgs(args);
+        return {
+            main: function (num) {
+                log('main');
+                fns1.scope('myScope', this).meth1();
+                fns1.scope('myScope', this).val = num;
+            },
+            'protected_scope__myScope': {
+                meth1: function () {
+                    log('meth1');
+                },
+                val: 200,
+            }
+        }
+    });
+    scopes.finalise(o1, 'myScope');
+    scopes.log(o1);
+
+    let o2 = scopes.parse(Object.create(o1), (...args) => {
+        fns2 = scopes.packageScopesFnArgs(args);
+        return {
+            meth2: function () {
+                log('meth2');
+                fns2.scope('myScope', this).meth1();
+            },
+        }
+    });
+
+    trycode(() => {
+        o2.meth2();
+    });
+    o2.main(3000);
+    let o3 = Object.create(o2);
+    let o4 = Object.create(o3);
+    o3.main(5000);
+    o4.main(6000);
+    scopes.log([o1, o2, o3, o4]);
 }
 
 function testSuper() {

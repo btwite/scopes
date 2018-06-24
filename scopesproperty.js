@@ -11,6 +11,9 @@
 module.exports = {
     defineProperty,
     defineProperties,
+    finalise,
+    finalize: finalise,
+    isFinal,
     isScoped,
     packageScopesFnArgs,
     pushDefaultPropertyAttributes,
@@ -32,6 +35,7 @@ const symSuperFn = Symbol.for('scopeSuperFn');
 const symInstances = Symbol.for('scopesInstances');
 const symScopeType = Symbol.for('scopeType');
 const symScopeName = Symbol.for('scopeName');
+const symFinal = Symbol.for('scopeFinal');
 
 const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a parsed object
 
@@ -72,6 +76,7 @@ require('./scopesservices').setPropertyInterface({
     hasPrivateInstances: _hasPrivateInstances,
     getPrivateInstancesObject: _getPrivateInstancesObject,
     assignScopeID: _assignScopeID,
+    isFinal,
     sPublic,
     sPrivate,
     symPublic,
@@ -162,6 +167,28 @@ function defineProperties(oPublic, fnDescriptors) {
     return (oPublic);
 }
 
+function finalise(oPublic, sProtScope) {
+    if (sProtScope == sProtected) {
+        throw new Error('The default protected scope cannot be finalised');
+    }
+    let oScopes;
+    if (!isScoped(oPublic) || !(oScopes = _getScopesObject(oPublic))[symFns][sProtScope]) {
+        throw new Error(`Protected scope '${sProtScope}' does not exist`);
+    }
+    let oScope = oScopes[sProtScope];
+    if (oScope[symScopeType] != sProtected) {
+        throw new Error(`'${sProtScope}' is not a protected scope`);
+    }
+    if (!oScope[symFinal]) _setSymbol(oScope, symFinal, true);
+    return (oPublic);
+}
+
+function isFinal(oPublic, sProtScope) {
+    if (!isScoped(oPublic)) return (false);
+    let oScope = _getScopesObject(oPublic)[sProtScope];
+    return (oScope && oScope[symFinal] ? true : false);
+}
+
 function isScoped(oPublic) {
     return (scopesMap.get(oPublic) ? true : false);
 }
@@ -185,9 +212,8 @@ function _preparePropertyOperation(oPublic) {
     if (!oScopes[symID]) {
         _allocateScopeID(oPublic, oScopes);
     }
-    let fns = oScopes[symFns];
-    if (!fns) {
-        oScopes[symFns] = fns = {
+    if (!oScopes[symFns]) {
+        oScopes[symFns] = {
             public: _publicThis(),
             private: _privateThis(oScopes[symID], sPrivate, oScopes),
             protected: _protectedThis(oScopes[symID], sProtected),
@@ -201,21 +227,32 @@ function _preparePropertyOperation(oPublic) {
 function _defineProperty(oScopes, prop, desc) {
     desc = _parseDescriptor(desc);
     if (desc[symScopeType] == sPublic) return (Object.defineProperty(oScopes[symPublic], prop, desc));
-    if (!oScopes[symFns][desc[symScopeName]]) {
-        oScopes[symFns][desc[symScopeName]] = scopeTypeFns[desc[symScopeType]](oScopes[symID], desc[symScopeName], oScopes);
-    }
 
     let oScope = scopeGetFns[desc[symScopeType]](oScopes, desc[symScopeName]);
     if (!oScope[symID]) {
         _setSymbol(oScope, symID, oScopes[symID]);
-        _setSymbol(oScope, symScopeName, desc[symScopeName]);
+    }
+    // If we don't have a scope function recorded then we do it now. Note however that if we have a
+    // finalised protected scope then we don't regsiter a scope function.
+    if (!oScopes[symFns][desc[symScopeName]] && !oScope[symFinal]) {
+        oScopes[symFns][desc[symScopeName]] = scopeTypeFns[desc[symScopeType]](oScopes[symID], desc[symScopeName], oScopes);
+    }
+    // Don't allow properties to be added to an instance of a finalised protected scope. This object owner
+    // cannot access this scope through their allocated scope functions so we fail any property operations.
+    if (oScope[symFinal] && !oScope.hasOwnProperty(symFinal)) {
+        throw new Error(`Protected scope '${oScope[symScopeName]}' has been finalised`);
     }
     return (Object.defineProperty(oScope, prop, desc));
 }
 
 function _getPrivateScope(oScopes, sScope) {
     let oScope = oScopes[sScope];
-    if (oScope) return (oScope);
+    if (oScope) {
+        if (oScope[symScopeType] != sPrivate) {
+            throw new Error(`Scope '${sScope}' is not a private scope`);
+        }
+        return (oScope);
+    }
     oScopes[sScope] = oScope = {};
     _setSymbol(oScope, symPublic, oScopes[symPublic]);
     _setSymbol(oScope, symScopeName, sScope);
@@ -226,7 +263,12 @@ function _getPrivateScope(oScopes, sScope) {
 
 function _getProtectedScope(oScopes, sScope) {
     let oScope = oScopes[sScope];
-    if (oScope) return (oScope);
+    if (oScope) {
+        if (oScope[symScopeType] != sProtected) {
+            throw new Error(`Scope '${sScope}' is not a protected scope`);
+        }
+        return (oScope);
+    }
     // Protected scopes are hierachical so need to see if we have a prototype
     oScopes[sScope] = oScope = Object.create(_getProtectedPrototype(oScopes[symPublic], sScope));
     _setSymbol(oScope, symPublic, oScopes[symPublic]);
@@ -239,7 +281,21 @@ function _getProtectedScope(oScopes, sScope) {
 function _getProtectedPrototype(oPublic, sScope) {
     let prot = Object.getPrototypeOf(oPublic);
     if (prot == null || prot === Object.prototype) return (Object.prototype);
-    return (_getProtectedScope(_getScopesObject(prot), sScope));
+    let oScopes = _getScopesObject(prot);
+    let oScope = oScopes[sScope];
+    if (!oScope) oScope = _getProtectedScope(oScopes, sScope);
+    if (oScope[symFinal]) {
+        // This protected scope has been finalised so all children must inherit from the
+        // finalised scope object. This could be the current scope or the prototype of
+        // the current scope.
+        if (!oScope.hasOwnProperty(symFinal)) {
+            oScope = Object.getPrototypeOf(oScope);
+            if (!oScope.hasOwnProperty(symFinal)) {
+                throw new Error('Finalised prototype structure is incorrect');
+            }
+        }
+    }
+    return (oScope);
 }
 
 function _allocateScopeID(oPublic, oScopes) {
@@ -389,7 +445,7 @@ function _superUndefined(that, sMeth, fnUndefined) {
 function _scopeThis(oScopes) {
     return ((name, that) => {
         let fn = oScopes[symFns][name];
-        if (typeof fn !== 'function') {
+        if (!fn) {
             throw new Error(`Scope '${name}' does not exist`);
         }
         return (fn(that));

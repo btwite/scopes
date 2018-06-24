@@ -166,7 +166,11 @@ function _log(oPublic, fnLogger) {
     fnLogger(`[-- (${oScopes[symID]})\npublic:`);
     fnLogger(oPublic);
     Object.keys(oScopes).forEach(sScope => {
-        fnLogger(sScope + ':');
+        if (property.isFinal(oPublic, sScope)) {
+            fnLogger(`final ${sScope}:`);
+        } else {
+            fnLogger(sScope + ':');
+        }
         let oScope = oScopes[sScope];
         fnLogger(oScope);
     });
