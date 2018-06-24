@@ -9,18 +9,19 @@ let scopes = require('./scopes');
 test();
 
 testFinal();
-//testSuper();
-//testAssign();
-//testDelete();
-//testGetOwnPropertyDescriptor();
-//testScopesDefineProperty();
-//testCrossObjectAccess();
-//testScopesGroupParse();
-//testScopesParse();
+testSuper();
+testAssign();
+testDelete();
+testGetOwnPropertyDescriptor();
+testScopesDefineProperty();
+testCrossObjectAccess();
+testScopesGroupParse();
+testScopesParse();
 
 function test() {}
 
 function testFinal() {
+    log('\n---------------- testFinal --------------');
     let fns1, fns2
     let o1 = scopes.parse((...args) => {
         fns1 = scopes.packageScopesFnArgs(args);
@@ -60,9 +61,11 @@ function testFinal() {
     o3.main(5000);
     o4.main(6000);
     scopes.log([o1, o2, o3, o4]);
+    log('------------------------------');
 }
 
 function testSuper() {
+    log('\n---------------- testSuper --------------');
     let o1 = scopes.parse(function (Public, Private, Protected, Scope, Super) {
         return {
             'protected_scope': {
@@ -103,10 +106,11 @@ function testSuper() {
     });
     let o4 = Object.create(o3);
     o4.main(1, 2, 3, 4);
+    log('------------------------------');
 }
 
 function testAssign() {
-    log('---------------- testAssign --------------');
+    log('\n---------------- testAssign --------------');
     let fns;
     let o1 = scopes.parse(function () {
         fns = scopes.packageScopesFnArgs(arguments);
@@ -145,7 +149,7 @@ function testAssign() {
 }
 
 function testDelete() {
-    log('---------------- testDelete --------------');
+    log('\n---------------- testDelete --------------');
     let fns;
     let o1 = scopes.parse(function () {
         fns = scopes.packageScopesFnArgs(arguments);
@@ -168,7 +172,7 @@ function testDelete() {
 }
 
 function testGetOwnPropertyDescriptor() {
-    log('---------------- testGetOwnPropertyDescriptor --------------');
+    log('\n---------------- testGetOwnPropertyDescriptor --------------');
     let fns;
     let o1 = scopes.parse(function () {
         fns = scopes.packageScopesFnArgs(arguments);
@@ -189,6 +193,7 @@ function testGetOwnPropertyDescriptor() {
 }
 
 function testScopesDefineProperty() {
+    log('\n----- testScopesDefineProperty -----')
     let scfns1;
     let o1 = scopes.defineProperties({}, function (Public, Private, Protected, Scope) {
         scfns1 = scopes.packageScopesFnArgs(arguments);
@@ -287,6 +292,7 @@ function testScopesDefineProperty() {
 }
 
 function testCrossObjectAccess() {
+    log('\n----- testCrossObjectAccess -----')
     const Person = scopes.parse((Public, Private) => {
         return {
             private_scope: {
