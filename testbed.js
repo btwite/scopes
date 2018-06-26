@@ -8,6 +8,9 @@ let scopes = require('./scopes');
 
 test();
 
+
+testLock();
+/*
 testFinal();
 testSuper();
 testAssign();
@@ -17,19 +20,51 @@ testScopesDefineProperty();
 testCrossObjectAccess();
 testScopesGroupParse();
 testScopesParse();
+*/
 
-function test() {}
+function test() {
+    let fn = () => {};
+    fn['myProp'] = 'test';
+    log(fn['myProp']);
+}
+
+function testLock() {
+    log('\n---------------- testLock --------------');
+    let o1 = scopes.parse(() => {
+        return {
+            'protected_scope': {
+                meth1: function () {
+                    log('meth1');
+                },
+                val: 200,
+            }
+        }
+    });
+    let fns = scopes.getScopeFns(o1);
+    let key = scopes.lock(o1);
+    trycode(() => {
+        fns = scopes.getScopeFns(o1);
+    });
+    trycode(() => {
+        scopes.defineProperty(o1, 'val1', 100);
+    });
+    scopes.defineProperty(key, 'val1', () => {
+        return (100);
+    });
+    scopes.log([fns.protected, o1]);
+    log('------------------------------');
+}
 
 function testFinal() {
     log('\n---------------- testFinal --------------');
     let fns1, fns2
-    let o1 = scopes.parse((...args) => {
-        fns1 = scopes.packageScopesFnArgs(args);
+    let o1 = scopes.parse(Public => {
+        fns1 = scopes.getScopeFns(Public);
         return {
             main: function (num) {
                 log('main');
-                fns1.scope('myScope', this).meth1();
-                fns1.scope('myScope', this).val = num;
+                fns1.myScope(this).meth1();
+                fns1.myScope(this).val = num;
             },
             'protected_scope__myScope': {
                 meth1: function () {
@@ -39,15 +74,15 @@ function testFinal() {
             }
         }
     });
-    scopes.finalise(fns1.scope('myScope', o1));
+    scopes.finalise(fns1.myScope(o1));
     scopes.log(o1);
 
-    let o2 = scopes.parse(Object.create(o1), (...args) => {
-        fns2 = scopes.packageScopesFnArgs(args);
+    let o2 = scopes.parse(Object.create(o1), Public => {
+        fns2 = scopes.getScopeFns(Public);
         return {
             meth2: function () {
                 log('meth2');
-                fns2.scope('myScope', this).meth1();
+                fns2.myScope(this).meth1();
             },
         }
     });
@@ -66,12 +101,13 @@ function testFinal() {
 
 function testSuper() {
     log('\n---------------- testSuper --------------');
-    let o1 = scopes.parse(function (Public, Private, Protected, Scope, Super) {
+    let o1 = scopes.parse(function (Public, Private, Protected) {
+        let fns = scopes.getScopeFns(Public);
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o1::method1');
-                    return (Super(this, 'method1', (...args1) => {
+                    return (fns.super(this, 'method1', (...args1) => {
                         log(...args1);
                         return (undefined);
                     })(...args));
@@ -82,22 +118,31 @@ function testSuper() {
             }
         };
     });
-    let o2 = scopes.parse(Object.create(o1), function (Public, Private, Protected, Scope, Super) {
+    let o2 = scopes.parse(Object.create(o1), function (Public) {
+        let fns = scopes.getScopeFns(Public);
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o2::method1');
-                    return (Super(this, 'method1')(...args));
+                    return (fns.super(this, 'method1')(...args));
                 }
             },
         };
     });
-    let o3 = scopes.parse(Object.create(o2), function (Public, Private, Protected, Scope, Super) {
+    let o3 = scopes.parse(Object.create(o2), function (Public) {
+        let fns = scopes.getScopeFns(Public);
         return {
             'protected_scope': {
                 method1: function (...args) {
                     log('o3::method1');
-                    Super(this, 'method1', (...args1) => {
+                    fns.super(this, 'method1', (...args1) => {
+                        log(...args);
+                    })(...args);
+                    fns.self(this, 'method2')(...args);
+                },
+                method2: function (...args) {
+                    log('o3::method2');
+                    fns.super(this, 'method1', (...args1) => {
                         log(...args);
                     })(...args);
                 }
@@ -112,8 +157,8 @@ function testSuper() {
 function testAssign() {
     log('\n---------------- testAssign --------------');
     let fns;
-    let o1 = scopes.parse(function () {
-        fns = scopes.packageScopesFnArgs(arguments);
+    let o1 = scopes.parse(Public => {
+        fns = scopes.getScopeFns(Public);
         return {
             'private__fld1': 200,
             'private__meth1': function () {
@@ -151,8 +196,8 @@ function testAssign() {
 function testDelete() {
     log('\n---------------- testDelete --------------');
     let fns;
-    let o1 = scopes.parse(function () {
-        fns = scopes.packageScopesFnArgs(arguments);
+    let o1 = scopes.parse(Public => {
+        fns = scopes.getScopeFns(Public);
         return {
             'private__fld1': 200,
             'protected__fld2': 300,
@@ -165,7 +210,7 @@ function testDelete() {
     scopes.log(o1);
     scopes.delete(fns.private(o1), 'fld1');
     scopes.delete(fns.protected(o1), 'fld2');
-    scopes.delete(fns.scope('myPrivate', o1), 'fld3');
+    scopes.delete(fns.myPrivate(o1), 'fld3');
     scopes.delete(o1, 'fld4');
     scopes.log(o1);
     log('------------------------------');
@@ -174,8 +219,8 @@ function testDelete() {
 function testGetOwnPropertyDescriptor() {
     log('\n---------------- testGetOwnPropertyDescriptor --------------');
     let fns;
-    let o1 = scopes.parse(function () {
-        fns = scopes.packageScopesFnArgs(arguments);
+    let o1 = scopes.parse(Public => {
+        fns = scopes.getScopeFns(Public);
         return {
             'private__fld1': 200,
             'protected__fld2': 300,
@@ -187,7 +232,7 @@ function testGetOwnPropertyDescriptor() {
     });
     log(scopes.getOwnPropertyDescriptor(fns.private(o1), 'fld1'));
     log(scopes.getOwnPropertyDescriptor(fns.protected(o1), 'fld2'));
-    log(scopes.getOwnPropertyDescriptor(fns.scope('myPrivate', o1), 'fld3'));
+    log(scopes.getOwnPropertyDescriptor(fns.myPrivate(o1), 'fld3'));
     log(scopes.getOwnPropertyDescriptor(o1, 'fld4'));
     log('------------------------------');
 }
@@ -195,8 +240,8 @@ function testGetOwnPropertyDescriptor() {
 function testScopesDefineProperty() {
     log('\n----- testScopesDefineProperty -----')
     let scfns1;
-    let o1 = scopes.defineProperties({}, function (Public, Private, Protected, Scope) {
-        scfns1 = scopes.packageScopesFnArgs(arguments);
+    let o1 = scopes.defineProperties({}, function (Public, Private, Protected) {
+        scfns1 = scopes.getScopeFns(Public);
         return ({
             method1: function () {
                 log('method1');
@@ -205,7 +250,7 @@ function testScopesDefineProperty() {
                 scope: 'private',
                 value: function () {
                     log('method2');
-                    Scope('myPrivate', this).method4()
+                    scfns1.myPrivate(this).method4()
                 },
             },
             method3: function () {
@@ -239,7 +284,7 @@ function testScopesDefineProperty() {
     });
     o1.method3();
 
-    let o2 = scopes.defineProperties(Object.create(o1), (Public, Private, Protected, Scope) => {
+    let o2 = scopes.defineProperties(Object.create(o1), (Public, Private, Protected) => {
         return ({
             method7: function () {
                 log('-----------------------')
@@ -262,8 +307,8 @@ function testScopesDefineProperty() {
     let o4 = Object.create(o3);
     o4.method7();
     let scfns3;
-    scopes.defineProperty(o3, 'meth1', function () {
-        scfns3 = scopes.packageScopesFnArgs(arguments);
+    scopes.defineProperty(o3, 'meth1', Public => {
+        scfns3 = scopes.getScopeFns(Public);
         return ({
             scope: 'protected',
             value: function () {
@@ -273,7 +318,7 @@ function testScopesDefineProperty() {
     });
     let scfns4;
     scopes.defineProperty(o4, 'meth2', function (Public, Private, Protected) {
-        scfns4 = scopes.packageScopesFnArgs(arguments);
+        scfns4 = scopes.getScopeFns(Public);
         return (function () {
             log('meth2');
             Protected(this).meth1();
@@ -286,7 +331,7 @@ function testScopesDefineProperty() {
 
     log('----------------- Test Freezing/Sealing scoped objects');
     log(Object.isFrozen(o3), Object.isFrozen(o2));
-    log(Object.isFrozen(scfns1.private(o1)), Object.isFrozen(scfns1.protected(o1)), Object.isFrozen(scfns1.scope('myPrivate', o1)));
+    log(Object.isFrozen(scfns1.private(o1)), Object.isFrozen(scfns1.protected(o1)), Object.isFrozen(scfns1.myPrivate(o1)));
     log(Object.isFrozen(scfns3.protected(o3)), Object.isSealed(scfns3.protected(o3)));
     log('-----------------');
 }
@@ -318,8 +363,8 @@ function testScopesGroupParse() {
     log('\n----- testScopesGroupParse -----')
     let scfns;
     let ot1 = {};
-    scopes.parse(ot1, (Public, ...more) => {
-        scfns = scopes.packageScopesFnArgs([Public, ...more]);
+    scopes.parse(ot1, (Public) => {
+        scfns = scopes.getScopeFns(Public);
         return {
             method1: function () {
                 log(`method1`);
@@ -377,8 +422,8 @@ function testScopesGroupParse() {
     log(scfns.protected(ot1).value);
     scfns.protected(ot1).method4();
     scfns.protected(ot1).method5();
-    let omyPrivate = scfns.scope('myPrivate', ot1);
-    let omyProtected = scfns.scope('myProtected', ot1);
+    let omyPrivate = scfns.myPrivate(ot1);
+    let omyProtected = scfns.myProtected(ot1);
     omyPrivate.method7();
     trycode(() => {
         omyPrivate.method8();
@@ -420,7 +465,7 @@ function testScopesGroupParse() {
     scfns.protected(ot2).method400();
     scfns.protected(ot2).method500();
 
-    omyProtected = scfns.scope('myProtected', ot2);
+    omyProtected = scfns.myProtected(ot2);
     omyProtected.method8();
     omyProtected.method9();
     omyProtected.method800();
@@ -430,8 +475,8 @@ function testScopesGroupParse() {
 function testScopesParse() {
     log('\n----- testScopesParse -----')
     let scfns1, scfns2, scfns3;
-    let ot1 = scopes.parse((Public, Private, ...more) => {
-        scfns1 = scopes.packageScopesFnArgs([Public, Private, ...more]);
+    let ot1 = scopes.parse((Public, Private) => {
+        scfns1 = scopes.getScopeFns(Public);
         return {
             public__method1: function () {
                 console.log('method1');
@@ -479,8 +524,8 @@ function testScopesParse() {
         };
     });
 
-    let ot3 = scopes.parse(Object.create(ot1), (...more) => {
-        scfns2 = scopes.packageScopesFnArgs([...more]);
+    let ot3 = scopes.parse(Object.create(ot1), Public => {
+        scfns2 = scopes.getScopeFns(Public);
         return {
             protected__method6: function () {
                 console.log('method6')
@@ -491,10 +536,10 @@ function testScopesParse() {
         };
     });
 
-    let ot4 = scopes.parse(Object.create(ot3), function () {
-        scfns3 = scopes.packageScopesFnArgs(arguments);
+    let ot4 = scopes.parse(Object.create(ot3), Public => {
+        scfns3 = scopes.getScopeFns(Public);
         return {
-            const_restricted__method8: function () {
+            const_private__method8: function () {
                 console.log('method8')
             },
         };

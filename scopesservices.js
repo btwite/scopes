@@ -33,6 +33,7 @@ function setPropertyInterface(intface) {
 }
 
 function assign(oTarget, ...sources) {
+    oTarget = property.resolvePublicObject(oTarget);
     sources.forEach((oSrc) => {
         _assign(oTarget, oSrc);
     });
@@ -111,12 +112,14 @@ function _checkPrivateScope(oScope) {
 }
 
 function freeze(oPublic) {
+    oPublic = property.resolvePublicObject(oPublic);
     return (_applyScopeOperation(oPublic, (o) => {
         return (Object.freeze(o));
     }));
 }
 
 function seal(oPublic) {
+    oPublic = property.resolvePublicObject(oPublic);
     return (_applyScopeOperation(oPublic, (o) => {
         return (Object.seal(o));
     }));
@@ -157,7 +160,7 @@ function log(objs, fnLogger) {
 function _log(oPublic, fnLogger) {
     // Make sure we have a real object to process otherwise just hand off to
     // the logger.
-    if (typeof oPublic !== 'object' || Array.isArray(oPublic) || !property.isScoped(oPublic)) {
+    if (typeof oPublic !== 'object' || !property.isScoped(oPublic)) {
         fnLogger(oPublic);
         return;
     }
