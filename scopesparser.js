@@ -94,7 +94,7 @@ function parse(oPublic, fnSpec) {
     if (arguments.length == 1) {
         fnSpec = oPublic;
         oPublic = {};
-    } else if (!oPublic || typeof oPublic !== 'object') {
+    } else if (typeof oPublic !== 'object') {
         throw new Error("Can only parse type object");
     }
 

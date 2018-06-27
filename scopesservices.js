@@ -143,18 +143,25 @@ function _applyScopeOperation(oPublic, fnOp) {
     return (fnOp(oPublic));
 }
 
-function log(objs, fnLogger) {
-    // Objects can be a single object or an array.
-    if (!fnLogger) fnLogger = (...more) => {
-        console.log(...more);
-    };
-    if (!Array.isArray(objs)) {
-        _log(objs, fnLogger);
-        return;
+function log(...args) {
+    if (args.length == 0) return;
+
+    // If the last argument is a function then we assume that it is an
+    // alternative logging implementation. If not we default to logging
+    // to the console.
+    let nArgs = args.length,
+        fnLogger = args[nArgs - 1];
+    if (typeof fnlogger === 'function') {
+        nArgs--;
+    } else {
+        fnLogger = (...more) => {
+            console.log(...more);
+        };
     }
-    objs.forEach(o => {
-        _log(o, fnLogger)
-    });
+
+    for (let i = 0; i < nArgs; i++) {
+        _log(args[i], fnLogger)
+    }
 }
 
 function _log(oPublic, fnLogger) {

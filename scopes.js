@@ -18,7 +18,7 @@ module.exports = {
     getScopeFns: modProperty.getScopeFns,
     finalise: modProperty.finalise,
     finalize: modProperty.finalize,
-    isfinal: modProperty.isFinal,
+    isFinal: modProperty.isFinal,
     isScoped: modProperty.isScoped,
     lock: modProperty.lock,
     isLocked: modProperty.isLocked,
