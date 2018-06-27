@@ -125,6 +125,18 @@ Extension to the `Object.seal` method to apply the seal to all *private* and *pr
 
 * *obj* - The target object to seal.
 
+#### super(that, methodname, [fnUndefined])
+Special scope function that will return an instance of the named method starting the search from the prototype of the object that is associated with the `super` scope function. If no method is found then `undefined` is returned.
+
+* *obj* - The current *this* object. The *this* object must inherit from teh object owing the `super` scope function.
+* *methodname* - The name of the method to locate.
+* *[fnUndefined]* - Optional function to handle an `undefined` response and substitute and alternate response.
+
+Example : `fns.super(this, 'myMethod')(arg1, arg2, ...);`
+
+#### self(that, methodname, [fnUndefined])
+As for `super` except that the method search starts at the object that owns the `self` scope function, rather than the immediate prototype.
+
 ### Contributing
 
 TBC
