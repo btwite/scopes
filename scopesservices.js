@@ -18,7 +18,7 @@ module.exports = {
 Object.freeze(module.exports);
 
 let property = undefined;
-let symPublic, symScopeName, symScopeType, symID, sPublic, sPrivate;
+let symPublic, symScopeName, symScopeType, symInstances, symID, sPublic, sPrivate;
 
 function setPropertyInterface(intface) {
     if (!property) {
@@ -26,6 +26,7 @@ function setPropertyInterface(intface) {
         symPublic = property.symPublic;
         symScopeName = property.symScopeName;
         symScopeType = property.symScopeType;
+        symInstances = property.symInstances;
         symID = property.symID;
         sPublic = property.sPublic;
         sPrivate = property.sPrivate;
@@ -131,15 +132,10 @@ function _applyScopeOperation(oPublic, fnOp) {
     Object.keys(oScopes).forEach(sScope => {
         fnOp(oScopes[sScope]);
     });
-    if (property.hasPrivateInstances(oScopes)) {
-        let instances = property.getPrivateInstancesObject(oScopes);
-        Object.keys(instances).forEach(sScope => {
-            let instance = instances[sScope];
-            Object.keys(instance).forEach(id => {
-                fnOp(instance[id]);
-            });
-        });
-    }
+    Object.keys(oScopes[symInstances]).forEach(sInstance => {
+        let id = sInstance.substring(sInstance.lastIndexOf('.sid') + 1);
+        if (id == oScopes[symID]) fnOp(oScopes[symInstances][sInstance]);
+    });
     return (fnOp(oPublic));
 }
 
@@ -181,20 +177,13 @@ function _log(oPublic, fnLogger) {
         } else {
             fnLogger(sScope + ':');
         }
-        let oScope = oScopes[sScope];
-        fnLogger(oScope);
+        fnLogger(oScopes[sScope]);
     });
-    if (property.hasPrivateInstances(oScopes)) {
-        let instances = property.getPrivateInstancesObject(oScopes);
-        Object.keys(instances).forEach(sScope => {
-            let instance = instances[sScope];
-            Object.keys(instance).forEach(id => {
-                if (id == oScopes[symID]) return;
-                let o = instance[id];
-                fnLogger(sScope + '.' + id + ':');
-                fnLogger(o);
-            });
-        });
-    }
+    Object.keys(oScopes[symInstances]).forEach(sInstance => {
+        let id = sInstance.substring(sInstance.lastIndexOf('.sid') + 1);
+        if (id == oScopes[symID]) return;
+        fnLogger(sInstance + ':');
+        fnLogger(oScopes[symInstances][sInstance]);
+    });
     fnLogger('--]');
 }

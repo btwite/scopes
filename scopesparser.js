@@ -229,7 +229,7 @@ function _parseScopeGroup(oSrc, scopeName, fnCallback, fnConstCallback) {
 }
 
 function _setConstDescriptor(desc) {
-    desc.writable = false;
+    if (!desc.set && !desc.get) desc.writable = false;
     desc.configurable = false;
     return (desc);
 }
