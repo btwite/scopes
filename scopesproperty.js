@@ -268,7 +268,10 @@ function _preparePropertyOperation(oPublic) {
 };
 
 function _defineProperty(oScopes, prop, desc) {
-    if (desc[symScopeType] == sPublic) return (Object.defineProperty(oScopes[symPublic], prop, desc));
+    if (desc[symScopeType] == sPublic) {
+        let oPublic = oScopes[symPublic];
+        return (Object.defineProperty(oPublic, prop, _fillDescriptor(desc, oPublic, prop)));
+    }
 
     let oScope = scopeGetFns[desc[symScopeType]](oScopes, desc[symScopeName]);
     if (!oScope[symID]) {
@@ -477,6 +480,7 @@ function __superThis(oScopes, fnStartPoint) {
 }
 
 function _getSuperFn(fn, that, sMeth, fnUndefined) {
+    fnUndefined = _getUndefinedFunction(fnUndefined);
     return ((...args) => {
         let result = fn.apply(that, args);
         if (result === undefined && fnUndefined) return (fnUndefined(that, sMeth, args));
@@ -485,9 +489,18 @@ function _getSuperFn(fn, that, sMeth, fnUndefined) {
 }
 
 function _superUndefined(that, sMeth, fnUndefined) {
+    fnUndefined = _getUndefinedFunction(fnUndefined);
     return ((...args) => {
         if (fnUndefined) return (fnUndefined(that, sMeth, args));
         return (undefined);
+    });
+}
+
+function _getUndefinedFunction(fnUndefined) {
+    if (fnUndefined === undefined) return (undefined);
+    if (typeof fnUndefined === 'function') return (fnUndefined);
+    return (() => {
+        return (fnUndefined);
     });
 }
 
@@ -499,7 +512,11 @@ function _checkDescriptor(srcDesc) {
         });
     } else {
         // Have an object but make sure that it is a real descriptor. If not treat as an object value
-        Object.keys(srcDesc).forEach(attr => {
+        let keys = Object.keys(srcDesc);
+        if (keys.length > 5) return ({
+            value: srcDesc
+        });
+        keys.forEach(attr => {
             if (!propAttrs.has(attr)) {
                 return ({
                     value: srcDesc

@@ -4,8 +4,22 @@
  * Provides the declarative parser support for scopes object template using the
  * property name to define scopes syntax extensions.
  * 
- * This is a meta level interface which is essentially
+ * This is a meta level interface which takes a source object template and produces a
+ * scoped object based on declaration syntax that is prepended to a property name.
  * 
+ * NOTE: The default property attribute values for 'writable', 'configurable' and
+ *       'enumerable' are NOT inherited from the template. The parse process results
+ *       in defineProperty requests to construct the scoped object and as such will
+ *       inherit defineProperty level attribute values.
+ * 
+ *       The defineProperty defaults are 'writable: false', 'configurable: false' and
+ *       'enumerable: true'. The latter being different to the Object.defineProperty
+ *       default value of false. The scopes library includes an interface to push and
+ *       pop changes to the defaults.
+ * 
+ *       The parser can influence the 'writable' and 'configurable' attributes based on
+ *       whether a parsed property is declared as 'const' or 'var'. If neither is
+ *       specified then the defineProperty defaults will apply.
  */
 
 'use strict'
@@ -37,6 +51,16 @@ const sConst = 'const' + sConnector;
 const sConstPublicScope = 'const_public' + sConnector;
 const sConstPrivateScope = 'const_private' + sConnector;
 const sConstProtectedScope = 'const_protected' + sConnector;
+const sPublicConstScope = 'public_const' + sConnector;
+const sPrivateConstScope = 'private_const' + sConnector;
+const sProtectedConstScope = 'protected_const' + sConnector;
+const sVar = 'var' + sConnector;
+const sVarPublicScope = 'var_public' + sConnector;
+const sVarPrivateScope = 'var_private' + sConnector;
+const sVarProtectedScope = 'var_protected' + sConnector;
+const sPublicVarScope = 'public_var' + sConnector;
+const sPrivateVarScope = 'private_var' + sConnector;
+const sProtectedVarScope = 'protected_var' + sConnector;
 const sPrivateScopeGroup = 'private_scope';
 const sProtectedScopeGroup = 'protected_scope';
 const sNamedPrivateScopeGroup = 'private_scope' + sConnector;
@@ -50,10 +74,20 @@ const transforms = (new Map)
     .set(sConstPublicScope, _constPublicTransform)
     .set(sConstPrivateScope, _constPrivateTransform)
     .set(sConstProtectedScope, _constProtectedTransform)
+    .set(sPublicConstScope, _constPublicTransform)
+    .set(sPrivateConstScope, _constPrivateTransform)
+    .set(sProtectedConstScope, _constProtectedTransform)
+    .set(sVar, _varTransform)
+    .set(sVarPublicScope, _varPublicTransform)
+    .set(sVarPrivateScope, _varPrivateTransform)
+    .set(sVarProtectedScope, _varProtectedTransform)
+    .set(sPublicVarScope, _varPublicTransform)
+    .set(sPrivateVarScope, _varPrivateTransform)
+    .set(sProtectedVarScope, _varProtectedTransform)
     .set(sPrivateScopeGroup, _privateScopeGroupTransform)
     .set(sProtectedScopeGroup, _protectedScopeGroupTransform)
     .set(sNamedPrivateScopeGroup, _namedPrivateScopeGroupTransform)
-    .set(sNamedProtectedScopeGroup, _namedProtectedScopeGroupTransform)
+    .set(sNamedProtectedScopeGroup, _namedProtectedScopeGroupTransform);
 
 const transformsScope = (new Map)
     .set(sPublicScope, sPublic)
@@ -63,10 +97,20 @@ const transformsScope = (new Map)
     .set(sConstPublicScope, sPublic)
     .set(sConstPrivateScope, sPrivate)
     .set(sConstProtectedScope, sProtected)
+    .set(sPublicConstScope, sPublic)
+    .set(sPrivateConstScope, sPrivate)
+    .set(sProtectedConstScope, sProtected)
+    .set(sVar, sPublic)
+    .set(sVarPublicScope, sPublic)
+    .set(sVarPrivateScope, sPrivate)
+    .set(sVarProtectedScope, sProtected)
+    .set(sPublicVarScope, sPublic)
+    .set(sPrivateVarScope, sPrivate)
+    .set(sProtectedVarScope, sProtected)
     .set(sPrivateScopeGroup, sPrivate)
     .set(sProtectedScopeGroup, sProtected)
     .set(sNamedPrivateScopeGroup, sPrivate)
-    .set(sNamedProtectedScopeGroup, sProtected)
+    .set(sNamedProtectedScopeGroup, sProtected);
 
 /**
  * Parse a POJO with scope extended elements and produce a native implementation
@@ -74,7 +118,10 @@ const transformsScope = (new Map)
  *      public__    - This is the default and provided for completness.
  *      private__   - Access is limited to the owning object.
  *      protected__ - Access is limited to objects in the prototype hierachy.
- *      const_*__   - The element is declared as a constant. Applies to data properties.
+ *      const_*__   - The property is declared as a constant. (writable = false, configurable = false)
+ *      *_const__   - As above
+ *      var_*__     - The property is declares as variable. (writable = true)
+ *      *_var__     - As above
  *      private_scope       - Separate object with just private properties. Allows const__
  *      protected_scope     - Separate object with just protected properties. Allows const__
  *      private_scope__     - Named private group scope (separate to private). Allows const__
@@ -125,15 +172,23 @@ function parse(oPublic, fnSpec) {
 }
 
 function _publicTransform(oPublic, name, oSrc, scopeName) {
-    __publicTransform(oPublic, name, Object.getOwnPropertyDescriptor(oSrc, scopeName));
+    __publicTransform(oPublic, name, _getSourcePropertyDescriptor(oSrc, scopeName));
 }
 
-function _constTransform(oPublic, name, oSrc, scopeName) {
-    _constPublicTransform.apply(undefined, arguments);
+function _constTransform(...args) {
+    _constPublicTransform(...args);
 }
 
 function _constPublicTransform(oPublic, name, oSrc, scopeName) {
-    __publicTransform(oPublic, name, _setConstDescriptor(Object.getOwnPropertyDescriptor(oSrc, scopeName)));
+    __publicTransform(oPublic, name, _setConstDescriptor(_getSourcePropertyDescriptor(oSrc, scopeName)));
+}
+
+function _varTransform(...args) {
+    _varPublicTransform(...args);
+}
+
+function _varPublicTransform(oPublic, name, oSrc, scopeName) {
+    __publicTransform(oPublic, name, _setVarDescriptor(_getSourcePropertyDescriptor(oSrc, scopeName)));
 }
 
 function __publicTransform(oPublic, name, desc) {
@@ -142,12 +197,17 @@ function __publicTransform(oPublic, name, desc) {
 
 
 function _privateTransform(oPublic, name, oSrc, scopeName, sScope) {
-    __privateTransform(oPublic, name, sScope, Object.getOwnPropertyDescriptor(oSrc, scopeName));
+    __privateTransform(oPublic, name, sScope, _getSourcePropertyDescriptor(oSrc, scopeName));
 }
 
 function _constPrivateTransform(oPublic, name, oSrc, scopeName, sScope) {
-    let desc = Object.getOwnPropertyDescriptor(oSrc, scopeName);
+    let desc = _getSourcePropertyDescriptor(oSrc, scopeName);
     __privateTransform(oPublic, name, sScope, _setConstDescriptor(desc));
+}
+
+function _varPrivateTransform(oPublic, name, oSrc, scopeName, sScope) {
+    let desc = _getSourcePropertyDescriptor(oSrc, scopeName);
+    __privateTransform(oPublic, name, sScope, _setVarDescriptor(desc));
 }
 
 function __privateTransform(oPublic, name, sScope, desc) {
@@ -159,12 +219,17 @@ function __privateTransform(oPublic, name, sScope, desc) {
 
 
 function _protectedTransform(oPublic, name, oSrc, scopeName, sScope) {
-    __protectedTransform(oPublic, name, sScope, Object.getOwnPropertyDescriptor(oSrc, scopeName));
+    __protectedTransform(oPublic, name, sScope, _getSourcePropertyDescriptor(oSrc, scopeName));
 }
 
 function _constProtectedTransform(oPublic, name, oSrc, scopeName, sScope) {
-    let desc = Object.getOwnPropertyDescriptor(oSrc, scopeName);
+    let desc = _getSourcePropertyDescriptor(oSrc, scopeName);
     __protectedTransform(oPublic, name, sScope, _setConstDescriptor(desc));
+}
+
+function _varProtectedTransform(oPublic, name, oSrc, scopeName, sScope) {
+    let desc = _getSourcePropertyDescriptor(oSrc, scopeName);
+    __protectedTransform(oPublic, name, sScope, _setVarDescriptor(desc));
 }
 
 function __protectedTransform(oPublic, name, sScope, desc) {
@@ -188,6 +253,8 @@ function __privateScopeGroupTransform(oPublic, oSrc, scopeName, sScope, nameOfSc
         _privateTransform(oPublic, actName, oGroup, scName, nameOfScope)
     }, (oGroup, scName, actName) => {
         _constPrivateTransform(oPublic, actName, oGroup, scName, nameOfScope)
+    }, (oGroup, scName, actName) => {
+        _varPrivateTransform(oPublic, actName, oGroup, scName, nameOfScope)
     });
 }
 
@@ -204,10 +271,12 @@ function __protectedScopeGroupTransform(oPublic, oSrc, scopeName, sScope, nameOf
         _protectedTransform(oPublic, actName, oGroup, scName, nameOfScope)
     }, (oGroup, scName, actName) => {
         _constProtectedTransform(oPublic, actName, oGroup, scName, nameOfScope)
+    }, (oGroup, scName, actName) => {
+        _varProtectedTransform(oPublic, actName, oGroup, scName, nameOfScope)
     });
 }
 
-function _parseScopeGroup(oSrc, scopeName, fnCallback, fnConstCallback) {
+function _parseScopeGroup(oSrc, scopeName, fnCallback, fnConstCallback, fnVarCallback) {
     let oGroup = oSrc[scopeName];
     if (!oGroup || typeof oGroup !== 'object') {
         throw new Error(`Invalid scope group for '${scopeName}'`);
@@ -220,16 +289,39 @@ function _parseScopeGroup(oSrc, scopeName, fnCallback, fnConstCallback) {
             actName = name.substring(i + sConnector.length);
             decl = name.substring(0, i + sConnector.length);
         }
-        if (!transforms.get(decl)) {
-            fnCallback(oGroup, name, name);
-        } else if (decl === sConst) {
-            fnConstCallback(oGroup, name, actName);
+        switch (decl) {
+            case sConst:
+                fnConstCallback(oGroup, name, actName);
+                break;
+            case sVar:
+                fnVarCallback(oGroup, name, actName);
+                break;
+            default:
+                fnCallback(oGroup, name, name);
+                break;
         }
     });
+}
+
+function _getSourcePropertyDescriptor(oSrc, prop) {
+    // The attributes configurable, enumerable and writable are not inherited from
+    // the source template. These are controlled by a combination of the 'var' and
+    // 'const' qualifiers as well as the default attributes that apply to 
+    // defineProperty.
+    let desc = Object.getOwnPropertyDescriptor(oSrc, prop);
+    delete desc.configurable;
+    delete desc.enumerable;
+    delete desc.writable;
+    return (desc);
 }
 
 function _setConstDescriptor(desc) {
     if (!desc.set && !desc.get) desc.writable = false;
     desc.configurable = false;
+    return (desc);
+}
+
+function _setVarDescriptor(desc) {
+    if (!desc.set && !desc.get) desc.writable = true;
     return (desc);
 }

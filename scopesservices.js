@@ -102,7 +102,7 @@ function _checkPrivateScope(oScope) {
         // go up to the actual scope prototype but also ensure that it belongs to the
         // same public object. If there is no prototype then we are at the scope object.
         let prot = Object.getPrototypeOf(oScope);
-        if (prot) {
+        if (prot !== null && prot !== Object.prototype) {
             if (prot[symPublic] !== oScope[symPublic]) {
                 return (undefined);
             }
