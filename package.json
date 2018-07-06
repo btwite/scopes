@@ -1,6 +1,6 @@
 {
   "name": "prop-scopes",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Assign 'public', 'protected' and 'private' scopes to object properties.",
   "main": "scopes.js",
   "scripts": {

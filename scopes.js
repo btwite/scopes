@@ -28,8 +28,9 @@ module.exports = {
     freeze: modServices.freeze,
     seal: modServices.seal,
     log: modServices.log,
-    pushDefaultPropertyAttributes: modProperty.pushDefaultPropertyAttributes,
-    popDefaultPropertyAttributes: modProperty.popDefaultPropertyAttributes,
-    resetDefaultPropertyAttributes: modProperty.resetDefaultPropertyAttributes
+    withConstantDefaultsDo: modProperty.withConstantDefaultsDo,
+    withVariableDefaultsDo: modProperty.withVariableDefaultsDo,
+    withObjectLiteralDefaultsDo: modProperty.withObjectLiteralDefaultsDo,
+    withAttributeDefaultsDo: modProperty.withAttributeDefaultsDo
 }
 Object.freeze(module.exports);

@@ -18,9 +18,10 @@ module.exports = {
     lock,
     isLocked,
     getScopeFns,
-    pushDefaultPropertyAttributes,
-    popDefaultPropertyAttributes,
-    resetDefaultPropertyAttributes
+    withConstantDefaultsDo,
+    withVariableDefaultsDo,
+    withObjectLiteralDefaultsDo,
+    withAttributeDefaultsDo
 };
 Object.freeze(module.exports);
 
@@ -43,10 +44,13 @@ const symKey = Symbol.for('scopeKey');
 
 const scopesMap = new WeakMap(); // Map that contains the scopes extension object for a parsed object
 const scopeKeys = new WeakMap(); // Map of keys for locked scoped objects.
-const propAttrs = new Set(); // Set of property attribute names
 
-propAttrs.add('scope').add('configurable').add('writable').add('enumerable').add('value');
-propAttrs.add('set').add('get');
+const propAttrsSet = new Set(); // Set of property attribute names
+propAttrsSet.add('scope').add('configurable').add('writable').add('enumerable').add('value');
+propAttrsSet.add('set').add('get');
+
+const defPropAttrsSet = new Set(); // Set of defaulting property attribute names
+defPropAttrsSet.add('configurable').add('writable').add('enumerable');
 
 const scopeTypeFns = {
     private: _privateThis,
@@ -57,13 +61,22 @@ const scopeGetFns = {
     protected: _getProtectedScope
 }
 
-let defPropAttrs = {
+const defConstAttrs = {
     enumerable: true,
     writable: false,
     configurable: false
 };
-const defAttrsStack = []; // Stack for managing default property attributes
-defAttrsStack.push(defPropAttrs);
+const defVarAttrs = {
+    enumerable: true,
+    writable: true,
+    configurable: false
+}
+const defLiteralAttrs = {
+    enumerable: true,
+    writable: true,
+    configurable: true
+}
+let defPropAttrs = defConstAttrs;
 
 let lastScopeID = 0;
 
@@ -92,26 +105,55 @@ require('./scopesservices').setPropertyInterface({
     symInstances,
 });
 
+/**
+ * The 'with*DefaultsDo' family of functions allow a caller to alter the default values
+ * for the 'writable', 'enumerable' and 'configurable' attributes of a property that is
+ * applied to all scopes object construction calls from the inline function argument.
+ * 
+ * Three convenience functions have been provided to set the standard scopes default for
+ * constant properties, variable type (writable) properties and the standard object literal
+ * defaults.
+ */
 
-function pushDefaultPropertyAttributes(attrs) {
-    let a = Object.assign({}, attrs);
-    Object.keys(defAttrsStack[0]).forEach(name => {
-        if (!a.hasOwnProperty(name)) a[name] = defAttrsStack[0][name];
+function withConstantDefaultsDo(fnDo) {
+    return (_withAttributeDefaultsDo(defConstAttrs, fnDo));
+}
+
+function withVariableDefaultsDo(fnDo) {
+    return (_withAttributeDefaultsDo(defVarAttrs, fnDo));
+}
+
+function withObjectLiteralDefaultsDo(fnDo) {
+    return (_withAttributeDefaultsDo(defLiteralAttrs, fnDo));
+}
+
+function withAttributeDefaultsDo(oAttrs, fnDo) {
+    if (typeof oAttrs !== 'object' || Array.isArray(oAttrs) || oAttrs === null) {
+        throw new Error('Invalid object attribute decsriptor');
+    }
+    // Defaults are only set for 'writable', 'enumerable' and 'configurable'
+    Object.keys(oAttrs).forEach(name => {
+        if (!defPropAttrsSet.has(name)) {
+            throw new Error(`Invalid defaulting attribute '${name}'`);
+        }
     });
-    defAttrsStack.push(defPropAttrs = a);
+    // Fill in any missing default(s) from the scopes defaults of defConstAttrs.
+    return (_withAttributeDefaultsDo(Object.assign(Object.assign({}, defConstAttrs), oAttrs),
+        fnDo));
 }
 
-function popDefaultPropertyAttributes() {
-    if (defAttrsStack.length == 1)
-        return (null);
-    let a = defAttrsStack.pop();
-    defPropAttrs = defAttrsStack[defAttrsStack.length - 1];
-    return (a);
-}
-
-function resetDefaultPropertyAttributes() {
-    defPropAttrs = defAttrsStack[0];
-    defAttrsStack.length = 1;
+function _withAttributeDefaultsDo(oAttrs, fnDo) {
+    let saveDefPropAttrs = defPropAttrs;
+    defPropAttrs = oAttrs;
+    let result;
+    try {
+        result = fnDo();
+    } catch (err) {
+        defPropAttrs = saveDefPropAttrs;
+        throw (err);
+    }
+    defPropAttrs = saveDefPropAttrs;
+    return (result);
 }
 
 
@@ -517,7 +559,7 @@ function _checkDescriptor(srcDesc) {
             value: srcDesc
         });
         keys.forEach(attr => {
-            if (!propAttrs.has(attr)) {
+            if (!propAttrsSet.has(attr)) {
                 return ({
                     value: srcDesc
                 });

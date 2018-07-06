@@ -5,7 +5,7 @@ A library that implements private and protected scopes for Javascript objects. S
 ### What is this repository for?
 
 * Scopes Javascript modules. `scopes.js` is the main module for the library
-* Version: 1.0.0
+* Version: 1.1.0
 
 ### Prerequisites
 
@@ -33,7 +33,7 @@ Extension of the `Object.defineProperty` method allowing the inclusion of a `sco
 
 Note that if the descriptor does not require access to the scope functions then a descriptor object can be passed in place of the inline function wrapper. All other non function values (including objects that are not in descriptor format) will be deemed to be a public value for the property. 
 
-Refer to *resetDefaultPropertyAttributes* for default property attribute values.
+Refer to *withAttributeDefaultsDo* for default property attribute values.
 
 #### defineProperties(obj, fnDescriptor)
 Extension of the `Object.defineProperties` method allowing multiple scoped properties to be defined in one call.
@@ -43,17 +43,17 @@ Extension of the `Object.defineProperties` method allowing multiple scoped prope
 
 Note that if the descriptor does not require access to the scope functions then a normal properties descriptor object can be passed in place of the inline function wrapper. As for *defineProperty* the attribute descriptor that is normally associated with each property can be replaced with any non attribute descriptor value which will be deemed to be the public value of the property.
 
-Refer to *resetDefaultPropertyAttributes* for default property attribute values.
+Refer to *withAttributeDefaultsDo* for default property attribute values.
 
 #### parse([obj], fnObjTemplate)
-The parse method will process an object template and parse the property names for scopes extended keywords, that assist in formulating a property descriptor that is then forwarded to `defineProperty`.
+The parse method will process an object template and parse the property names for a scopes keyword(s) prefix, that assist in formulating a property descriptor that is then forwarded to `defineProperty`.
 
 * *[obj]* - Optional target object for the parsed property definitions. If no object is provided then the `parse` method will create a new object.
 * *fnObjTemplate* - A function that returns an object template that is to be parsed. As for `defineProperty` the function is passed the scope transition functions for *public*, *private* and *protected*.
 
 Note that if the keyword extended object literal does not require access to the scope functions then then the object literal can be passed in place of the inline function wrapper.
 
-Refer to *resetDefaultPropertyAttributes* for default property attribute values. The property attributes `configurable`, `writable` and `enumerable` are not derived from the extended properties that are defined in the template. The `const` and `var` qualifiers will set one or more attributes as indicated in the next section but otherwise the scopes default attributes will be applied if any of three attributes mentioned above are not present.
+Refer to *withAttributeDefaultsDo* for default property attribute values. The property attributes `configurable`, `writable` and `enumerable` are not derived from the extended properties that are defined in the template. The `const` and `var` qualifiers will set one or more attributes as indicated in the next section but otherwise the scopes default attributes will be applied if any of three attributes mentioned above are not present.
 
 ##### Property Name Keyword Extensions
 
@@ -153,21 +153,34 @@ Example : `fns.super(this, 'myMethod')(arg1, arg2, ...);`
 #### self(that, methodname, [fnUndefined])
 As for `super` except that the method search starts at the object that owns the `self` scope function, rather than the immediate prototype.
 
-#### pushDefaultPropertyAttributes(propAttrs)
-Push an alternate set of default property attribute values to be applied to new properties defined for an object. The default attribute values are applied whenever a new property is defined via the *defineProperty*, *defineProperties* and *parse* methods.
+#### withAttributeDefaultsDo(defAttrs, fnDo)
+Returns the result of calling the `fnDo` function after setting the scopes default property attribute values to the `defAttrs` descriptor object.
 
-See *resetDefaultPropertyAttributes* for more details.
+* *defAttrs* - An object that contains values for one or more of the property attributes `writable`, `configurable` and `enumerable`. An unspecified attribute will be sourced from the scopes startup constant property default of `{ writable: false, configurable: false, enumerable: true }`.
+* *fnDo* - A function that when called will be encapsulated by the modified default property attribute values. These default attribute values will be applied whenever a new property is defined via the scopes *defineProperty*, *defineProperties* and *parse* methods.
 
-#### popDefaultPropertyAttributes()
-Pop the current default property attributes values and return to the previously pushed values or the scopes package defaults.
+Note that the *writable* attribute will only be applied to *value* type properties. The default is ignored if a *get* or *set* attribute is defined.
 
-See *resetDefaultPropertyAttributes* for more details.
+#### withConstantDefaultsDo(fnDo)
+Convenience method that returns the result of calling the `fnDo` function after setting the scopes default property attribute values to define constant properties.
 
-#### resetDefaultPropertyAttributes()
-Clears the current stack of pushed default attribute values and restores the scopes package defaults. The property attributes that cen be defaulted are as follows:
-* *configurable* - Scopes default: *false*
-* *enumerable* - Scopes default: *true*
-* *writable* - Scopes default: *false*. The *writable* attribute will only be applied to *value* type properties. The default is ignored if the *get* or *set* attribute are defined.
+Attribute values are set to `{ writable: false, configurable: false, enumerable: true }`.
+
+See *withAttributeDefaultsDo* for more details.
+
+#### withVariableDefaultsDo(fnDo)
+Convenience method that returns the result of calling the `fnDo` function after setting the scopes default property attribute values to define variable properties.
+
+Attribute values are set to `{ writable: true, configurable: false, enumerable: true }`.
+
+See *withAttributeDefaultsDo* for more details.
+
+#### withObjectLiteralDefaultsDo(fnDo)
+Convenience method that returns the result of calling the `fnDo` function after setting the scopes default property attribute values to be consistent with standard object literals.
+
+Attribute values are set to `{ writable: true, configurable: true, enumerable: true }`.
+
+See *withAttributeDefaultsDo* for more details.
 
 ### Contributing
 

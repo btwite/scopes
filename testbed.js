@@ -9,6 +9,7 @@ let scopes = require('./scopes');
 
 test();
 
+
 testSuper();
 testLock();
 testFinal();
@@ -22,21 +23,52 @@ testScopesParse();
 
 
 function test() {
-    let o = scopes.parse({
-        meth1() {
-            return 'meth1';
-        }
+    function createPerson() {
+        let address = '<Missing Address>';
+        return {
+            getAddress() {
+                return (address);
+            },
+            setAddress(v) { /* ... */
+                address = v;
+            }
+        };
+    }
+    //    let scopes = require('prop-scopes');
+    const Person = scopes.parse((Public, Private, Protected) => {
+        return {
+            getAddress() {
+                return (Protected(this).address);
+            },
+            setAddress(v) { /* ... */
+                Protected(this).address = v;
+            },
+            protected_var__address: '<Missing Address>'
+        };
     });
-    let o1 = scopes.parse(Object.create(o), Public => {
-        let fns = scopes.getScopeFns(Public);
-        return ({
-            meth1() {
-                log(fns.super(this, 'meth1', 100)());
-                log(fns.super(this, 'meth2', 200)());
+    const Landlord = scopes.parse(Object.create(Person),
+        (Public, Private, Protected) => {
+            return {
+                getRentalAddress() {
+                    return (Protected(this).rentalAddress);
+                },
+                setRentalAddress(v) {
+                    /* ... */
+                    Protected(this).rentalAddress = v;
+                },
+                protected_var__rentalAddress: '<Missing Rental Address>',
+                formatAddresses() {
+                    return ('Home Address   : ' + Protected(this).address +
+                        '\nRental Address : ' +
+                        Protected(this).rentalAddress);
+                }
             }
         });
-    });
-    o1.meth1();
+    let tim = Object.create(Landlord);
+    tim.setAddress('5 Milo Avenue Mytown');
+    tim.setRentalAddress('672 Elm Place Nextown');
+    console.log(tim.formatAddresses());
+    console.log(tim.address, ':', tim.rentalAddress);
 }
 
 function testLock() {
@@ -204,18 +236,18 @@ function testAssign() {
 
 function testDelete() {
     log('\n---------------- testDelete --------------');
-    scopes.pushDefaultPropertyAttributes({
+    let o1 = scopes.withAttributeDefaultsDo({
         configurable: true
+    }, () => {
+        return (scopes.parse({
+            private__fld1: 200,
+            protected__fld2: 300,
+            private_scope__myPrivate: {
+                fld3: 1000
+            },
+            fld4: 5000,
+        }));
     });
-    let o1 = scopes.parse({
-        private__fld1: 200,
-        protected__fld2: 300,
-        private_scope__myPrivate: {
-            fld3: 1000
-        },
-        fld4: 5000,
-    });
-    scopes.popDefaultPropertyAttributes();
 
     let fns = scopes.getScopeFns(o1);
     scopes.log(o1);
