@@ -24,6 +24,20 @@ A formal testing environment is yet to be setup.
 
 ### API
 
+The following example shows the inclusion of the scopes library when the npm package `prop-scopes` has been installed.
+
+```
+let scopes = require('prop-scopes');
+let myObject = scopes.defineProperty({}, 'myPrivateMethod', (Public, Private, Protected) => {
+    return {
+        scope: 'private',
+        value: function () {
+            Public(this).myPublicMethod();
+        }
+    };
+});
+```
+
 #### defineProperty(obj, prop, fnDescriptor)
 Extension of the `Object.defineProperty` method allowing the inclusion of a `scope` attribute to nominate the scope of the property.
 

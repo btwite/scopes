@@ -9,7 +9,6 @@ let scopes = require('./scopes');
 
 test();
 
-
 testSuper();
 testLock();
 testFinal();
@@ -22,54 +21,7 @@ testScopesGroupParse();
 testScopesParse();
 
 
-function test() {
-    function createPerson() {
-        let address = '<Missing Address>';
-        return {
-            getAddress() {
-                return (address);
-            },
-            setAddress(v) { /* ... */
-                address = v;
-            }
-        };
-    }
-    //    let scopes = require('prop-scopes');
-    const Person = scopes.parse((Public, Private, Protected) => {
-        return {
-            getAddress() {
-                return (Protected(this).address);
-            },
-            setAddress(v) { /* ... */
-                Protected(this).address = v;
-            },
-            protected_var__address: '<Missing Address>'
-        };
-    });
-    const Landlord = scopes.parse(Object.create(Person),
-        (Public, Private, Protected) => {
-            return {
-                getRentalAddress() {
-                    return (Protected(this).rentalAddress);
-                },
-                setRentalAddress(v) {
-                    /* ... */
-                    Protected(this).rentalAddress = v;
-                },
-                protected_var__rentalAddress: '<Missing Rental Address>',
-                formatAddresses() {
-                    return ('Home Address   : ' + Protected(this).address +
-                        '\nRental Address : ' +
-                        Protected(this).rentalAddress);
-                }
-            }
-        });
-    let tim = Object.create(Landlord);
-    tim.setAddress('5 Milo Avenue Mytown');
-    tim.setRentalAddress('672 Elm Place Nextown');
-    console.log(tim.formatAddresses());
-    console.log(tim.address, ':', tim.rentalAddress);
-}
+function test() {}
 
 function testLock() {
     log('\n---------------- testLock --------------');
