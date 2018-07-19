@@ -4,8 +4,8 @@
 
 "use strict"
 
-let scopes = require('./scopes');
-//let scopes = require('prop-scopes');
+// let scopes = require('./scopes');
+let scopes = require('prop-scopes');
 
 test();
 
